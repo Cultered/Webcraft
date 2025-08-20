@@ -21,4 +21,7 @@ export class Vector4 {
     mul(other:Vector4):Vector4{
         return new Vector4(this.x*other.x,this.y*other.y,this.z*other.z,this.w*other.w)
     }
+    toFloat32Array():Float32Array {
+        return new Float32Array([this.x, this.y, this.z, this.w]);
+    }
 }

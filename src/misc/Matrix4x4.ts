@@ -86,5 +86,13 @@ export class Matrix4x4 {
 
         return projectionMatrix.mulMatrix(camRotateMatrix).mulMatrix(translateMatrix).mulMatrix(rotateMatrix).mulMatrix(scaleMatrix);// multiply in reverse order
     }
+    toFloat32Array(): Float32Array {
+        return new Float32Array([
+            this.vec1.x, this.vec1.y, this.vec1.z, this.vec1.w,
+            this.vec2.x, this.vec2.y, this.vec2.z, this.vec2.w,
+            this.vec3.x, this.vec3.y, this.vec3.z, this.vec3.w,
+            this.vec4.x, this.vec4.y, this.vec4.z, this.vec4.w
+        ]);
+    }
 
 }

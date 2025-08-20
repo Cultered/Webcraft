@@ -5,11 +5,9 @@ import type { SceneObject } from '../Model/Model';
 
 class View {
     // GPU related
-    private _adapter?: GPUAdapter;
     private device?: GPUDevice;
     private canvas?: HTMLCanvasElement;
     private context?: GPUCanvasContext;
-    private _format?: GPUTextureFormat;
     private depthTexture?: GPUTexture;
     private renderPipeline?: GPURenderPipeline;
     // per-object buffers are stored in objectBuffers
@@ -19,6 +17,13 @@ class View {
 
     // Scene
     private sceneObjects: SceneObject[] = [];
+    private camera: SceneObject = {
+        id: 'viewCamera',
+        position: new Vector4(0, 0, 0, 1),
+        rotation: new Vector4(0, 0, 0, 0),
+        scale: new Vector4(1, 1, 1, 1),
+        props: { vertices: new Float32Array(), indices: new Uint32Array() }
+    };
 
     // Helper matrix instance for creating projection/rotation matrices
     private matrixHelper = new Matrix4x4(new Vector4(1, 0, 0, 0), new Vector4(0, 1, 0, 0), new Vector4(0, 0, 1, 0), new Vector4(0, 0, 0, 1));
@@ -44,11 +49,9 @@ class View {
         context.configure({ device, format, alphaMode: 'premultiplied' });
 
         // store
-        this._adapter = adapter;
         this.device = device;
         this.canvas = canvas;
         this.context = context;
-        this._format = format;
 
         try {
             const sampleCount = 1;
@@ -116,6 +119,9 @@ class View {
         this.sceneObjects = objects;
         await this.uploadObjectBuffers();
     }
+    registerCamera(camera: SceneObject) {
+        this.camera = camera;
+    }
 
     private async uploadObjectBuffers() {
         if (!this.device) return;
@@ -164,22 +170,20 @@ class View {
                 if (!buf) continue;
 
                 // update object uniform (position + rotation matrix or similar) into uniform1Buffer
-                const rm = this.matrixHelper.renderMatrix(new Vector4(1, 1, 1, 1), obj.rotation, obj.position, new Vector4(0, 0, 4, 0), new Vector4(0, 0, 0, 0), 30, (this.canvas!.width) / (this.canvas!.height), 0.1, 1000);
-                const binding0uniform = new Float32Array([
-                    rm.vec1.x, rm.vec1.y, rm.vec1.z, rm.vec1.w,
-                    rm.vec2.x, rm.vec2.y, rm.vec2.z, rm.vec2.w,
-                    rm.vec3.x, rm.vec3.y, rm.vec3.z, rm.vec3.w,
-                    rm.vec4.x, rm.vec4.y, rm.vec4.z, rm.vec4.w,
-                ]);
+                const binding0uniform = this.matrixHelper.renderMatrix(
+                    obj.scale, obj.rotation, obj.position,
+                    this.camera.position, this.camera.rotation,
+                    30, (this.canvas!.width) / (this.canvas!.height), 0.1, 1000)
+                    .toFloat32Array() as GPUAllowSharedBufferSource;
                 this.device.queue.writeBuffer(this.uniform0Buffer!, 0, binding0uniform);
 
-                const debugpos: Vector4 = rm.mul(obj.position);
-                console.log(`Rendering object ${obj.id} at position:`, debugpos);
-
                 passEncoder.setVertexBuffer(0, buf.vertexBuffer);
+
                 const indexFormat: GPUIndexFormat = (buf.indices instanceof Uint16Array) ? 'uint16' : 'uint32';
                 passEncoder.setIndexBuffer(buf.indexBuffer, indexFormat);
+
                 passEncoder.setBindGroup(0, this.bindGroup);
+
                 passEncoder.drawIndexed(buf.indices.length);
             }
 

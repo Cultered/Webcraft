@@ -4,6 +4,7 @@ export type SceneObject = {
     id: string;
     position: Vector4;
     rotation: Vector4;
+    scale: Vector4;
     props: {
         vertices: Float32Array;
         indices: Uint32Array | Uint16Array;
@@ -55,7 +56,6 @@ export default class Model {
 
     private generateCube(size: number) {
         const hs = size / 2;
-        // 8 unique positions
         const vertices = [
             -hs, -hs, -hs,
              hs, -hs, -hs,
@@ -95,6 +95,7 @@ export default class Model {
             id,
             position: position ?? new Vector4(0, 0, 0, 1),
             rotation: rotation ?? new Vector4(0, 0, 0, 0),
+            scale: new Vector4(1, 1, 1, 1), // default scale
             props: { vertices, indices }
         });
     }
@@ -105,12 +106,26 @@ export default class Model {
             id,
             position: position ?? new Vector4(0, 0, 0, 1),
             rotation: rotation ?? new Vector4(0, 0, 0, 0),
+            scale: new Vector4(1, 1, 1, 1), // default scale
             props: { vertices, indices }
         });
     }
 
     getObjects() {
         return this.objects;
+    }
+
+    getCamera(): SceneObject {
+        return {
+            id: 'viewCamera',
+            position: new Vector4(0, 0, 4, 1), // default camera position
+            rotation: new Vector4(0, 0, 0, 0), // default camera rotation
+            scale: new Vector4(1, 1, 1, 1), // default scale
+            props: {
+                vertices: new Float32Array([]), // no vertices for camera
+                indices: new Uint32Array([]) // no indices for camera
+            }
+        }
     }
 
     update(deltaMs: number) {
