@@ -4,27 +4,26 @@ struct VertexOut {
     @builtin(position) position: vec4f,
     @location(0) fragPosition: vec4f,
 };
-struct ViewUniforms {
-    projection: mat4x4<f32>,
-};
-struct ObjectUniform{
-    position: vec4f,
-    rotation: mat4x4<f32>,
+struct VertexIn {
+  @location(0) position: vec3f
 };
 
-@group(0) @binding(0) // Use next available binding slot
-var<uniform> view: ViewUniforms;
+struct Matrices { m: array<mat4x4<f32>> }
+
+
+@group(0) @binding(0)
+var<storage, read> matrices: Matrices;
 
 
 
 @vertex
-fn vertex_main(@location(0) position: vec3f) -> VertexOut {
-    var output: VertexOut;
-
-    let positionVec4 = vec4f(position, 1.0);
-    output.position = view.projection * positionVec4;
-    output.fragPosition = positionVec4;
-    return output;
+fn vertex_main(in: VertexIn,@builtin(vertex_index) v_idx: u32, @builtin(instance_index) i_idx: u32) -> VertexOut {
+  var output: VertexOut;
+  let model = matrices.m[i_idx];
+  let pos4 = vec4f(in.position, 1.0);
+  output.position = model * pos4;
+  output.fragPosition = pos4;
+  return output;
 }
 
 @fragment

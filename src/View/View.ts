@@ -13,7 +13,11 @@ class View {
     // per-object buffers are stored in objectBuffers
     private objectBuffers = new Map<string, { vertexBuffer: GPUBuffer; indexBuffer: GPUBuffer; indices: Uint32Array | Uint16Array }>();
     private bindGroup?: GPUBindGroup;
-    private uniform0Buffer?: GPUBuffer; // view/projection
+    private storageBuffer?: GPUBuffer; // view/projection
+    public maxObjects = 10000; // max objects in scene, dynamic
+    private fov = 30; // field of view in degrees
+    private near = 0.1; // near plane distance
+    private far = 1000; // far plane distance
 
     // Scene
     private sceneObjects: SceneObject[] = [];
@@ -65,13 +69,16 @@ class View {
             const shader = renderer;
             const shaderModule = device.createShaderModule({ code: shader });
 
-            // uniform buffer for view/projection
-            this.uniform0Buffer = device.createBuffer({ size: 64, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
+            // storage buffer for view/projection matrices each object
+            this.storageBuffer = this.device.createBuffer({
+                size: 64 * this.maxObjects,
+                usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST
+            });
 
             const bindGroupLayout = device.createBindGroupLayout({
-                entries: [{ binding: 0, visibility: GPUShaderStage.VERTEX | GPUShaderStage.FRAGMENT, buffer: { type: 'uniform' } }],
+                entries: [{ binding: 0, visibility: GPUShaderStage.VERTEX, buffer: { type: 'read-only-storage' } }],
             });
-            this.bindGroup = device.createBindGroup({ layout: bindGroupLayout, entries: [{ binding: 0, resource: { buffer: this.uniform0Buffer! } }] });
+            this.bindGroup = device.createBindGroup({ layout: bindGroupLayout, entries: [{ binding: 0, resource: { buffer: this.storageBuffer! } }] });
 
             const vertexBuffers = [{ attributes: [{ shaderLocation: 0, offset: 0, format: 'float32x3' }], arrayStride: 12, stepMode: 'vertex' }];
 
@@ -114,16 +121,19 @@ class View {
 
 
     // Register scene objects (from Model) so View can upload buffers and draw
-    async registerSceneObjects(objects: SceneObject[]) {
+    async registerSceneObjects(objects: SceneObject[], updateVertices: boolean) {
         if (!this.device) throw new Error('Device not initialized');
         this.sceneObjects = objects;
-        await this.uploadObjectBuffers();
+        if (updateVertices) {
+            await this.uploadMeshBuffers();
+        }
+        this.updateObjectStorageBuffer(objects);
     }
     registerCamera(camera: SceneObject) {
         this.camera = camera;
     }
 
-    private async uploadObjectBuffers() {
+    private async uploadMeshBuffers() {
         if (!this.device) return;
         for (const obj of this.sceneObjects) {
             if (this.objectBuffers.has(obj.id)) continue;
@@ -135,6 +145,35 @@ class View {
             this.device.queue.writeBuffer(indexBuffer, 0, i.buffer as ArrayBuffer, i.byteOffset, i.byteLength);
             this.objectBuffers.set(obj.id, { vertexBuffer, indexBuffer, indices: i });
         }
+    }
+
+    private updateObjectStorageBuffer(objects: SceneObject[]) {
+        if (!this.device) throw new Error('Device not initialized');
+        this.sceneObjects = objects;
+        const objectCount = objects.length;
+        if (objectCount > this.maxObjects) {
+            console.warn(`Object count ${objectCount} exceeds maxObjects ${this.maxObjects}, resizing storage buffer`);
+            this.maxObjects = objectCount; // update maxObjects
+            this.storageBuffer?.destroy(); // destroy old buffer
+            this.storageBuffer = this.device.createBuffer({
+                size: 64 * this.maxObjects, // 16 bytes per matrix (4x4)
+                usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST
+            });
+        }
+        const allObjectMatricesBuffer = new Float32Array(objectCount * 16); // 4x4 matrix for each object
+        // update object uniform (position + rotation matrix or similar) into uniform1Buffer
+        for (let i = 0; i < objects.length; i++) {
+            const obj = objects[i];
+            const offset = i * 16; // 4x4 matrix
+            const matrix = this.matrixHelper.renderMatrix(
+                obj.scale, obj.rotation, obj.position,
+                this.camera.position, this.camera.rotation,
+                this.fov, (this.canvas!.width) / (this.canvas!.height), this.near, this.far
+            );
+            allObjectMatricesBuffer.set(matrix.toFloat32Array(), offset);
+        }
+        this.device.queue.writeBuffer(this.storageBuffer!, 0, allObjectMatricesBuffer);
+
     }
 
     render(): void {
@@ -165,17 +204,10 @@ class View {
             passEncoder.setPipeline(this.renderPipeline);
 
             // draw each registered object
+            let instanceIndex = 0;
             for (const obj of this.sceneObjects) {
                 const buf = this.objectBuffers.get(obj.id);
                 if (!buf) continue;
-
-                // update object uniform (position + rotation matrix or similar) into uniform1Buffer
-                const binding0uniform = this.matrixHelper.renderMatrix(
-                    obj.scale, obj.rotation, obj.position,
-                    this.camera.position, this.camera.rotation,
-                    30, (this.canvas!.width) / (this.canvas!.height), 0.1, 1000)
-                    .toFloat32Array() as GPUAllowSharedBufferSource;
-                this.device.queue.writeBuffer(this.uniform0Buffer!, 0, binding0uniform);
 
                 passEncoder.setVertexBuffer(0, buf.vertexBuffer);
 
@@ -184,7 +216,8 @@ class View {
 
                 passEncoder.setBindGroup(0, this.bindGroup);
 
-                passEncoder.drawIndexed(buf.indices.length);
+                passEncoder.drawIndexed(buf.indices.length, 1,0,0,instanceIndex);
+                instanceIndex++;
             }
 
             passEncoder.end();

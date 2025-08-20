@@ -13,9 +13,10 @@ export type SceneObject = {
 
 export default class Model {
     private objects: SceneObject[] = [];
+    private cameras: SceneObject[] = [];
 
-    constructor() {}
-
+    constructor() { }
+    // TODO sphere generation based on triangulation of an octahedron
     private generateIndexedSphere(lati: number, longi: number, radius: number) {
         const vertices: number[] = [];
         const indices: number[] = [];
@@ -47,7 +48,6 @@ export default class Model {
                 indices.push(second, first + 1, second + 1);
             }
         }
-
         return {
             vertices: new Float32Array(vertices),
             indices: new Uint32Array(indices),
@@ -58,29 +58,22 @@ export default class Model {
         const hs = size / 2;
         const vertices = [
             -hs, -hs, -hs,
-             hs, -hs, -hs,
-             hs,  hs, -hs,
-            -hs,  hs, -hs,
-            -hs, -hs,  hs,
-             hs, -hs,  hs,
-             hs,  hs,  hs,
-            -hs,  hs,  hs,
+            hs, -hs, -hs,
+            hs, hs, -hs,
+            -hs, hs, -hs,
+            -hs, -hs, hs,
+            hs, -hs, hs,
+            hs, hs, hs,
+            -hs, hs, hs,
         ];
 
-        // 12 triangles (two per face) using 0-7 indices
         const indices = [
-            // back face
-            0, 2, 1,  0, 3, 2,
-            // front face
-            4, 5, 6,  4, 6, 7,
-            // left
-            4, 1, 5,  4, 0, 1,
-            // right
-            3, 6, 2,  3, 7, 6,
-            // top
-            1, 6, 5,  1, 2, 6,
-            // bottom
-            4, 3, 0,  4, 7, 3,
+            0, 2, 1, 0, 3, 2,
+            4, 5, 6, 4, 6, 7,
+            4, 1, 5, 4, 0, 1,
+            3, 6, 2, 3, 7, 6,
+            1, 6, 5, 1, 2, 6,
+            4, 3, 0, 4, 7, 3,
         ];
 
         return {
@@ -115,17 +108,38 @@ export default class Model {
         return this.objects;
     }
 
-    getCamera(): SceneObject {
-        return {
-            id: 'viewCamera',
-            position: new Vector4(0, 0, 4, 1), // default camera position
-            rotation: new Vector4(0, 0, 0, 0), // default camera rotation
+    addCamera(id: string, position?: Vector4, rotation?: Vector4) {
+        const camera: SceneObject = {
+            id,
+            position: position ?? new Vector4(0, 0, 4, 1), // default camera position
+            rotation: rotation ?? new Vector4(0, 0, 0, 0), // default camera rotation
             scale: new Vector4(1, 1, 1, 1), // default scale
             props: {
                 vertices: new Float32Array([]), // no vertices for camera
                 indices: new Uint32Array([]) // no indices for camera
             }
+        };
+        this.cameras.push(camera);
+    }
+
+    updateCamera(id: string, position: Vector4, rotation: Vector4) {
+        const camera = this.cameras.find(cam => cam.id === id);
+        if (camera) {
+            camera.position = position;
+            camera.rotation = rotation;
+        } else {
+            console.warn(`Camera with id ${id} not found.`);
         }
+    }
+
+    getCamera(id: string): SceneObject {
+        return this.cameras.find(camera => camera.id === id) || {
+            id: 'default-camera',
+            position: new Vector4(0, 0, 4, 1),
+            rotation: new Vector4(0, 0, 0, 0),
+            scale: new Vector4(1, 1, 1, 1),
+            props: { vertices: new Float32Array([]), indices: new Uint32Array([]) }
+        };
     }
 
     update(deltaMs: number) {
