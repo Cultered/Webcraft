@@ -1,7 +1,7 @@
 import { renderer } from './shaders/renderer';
 import { Matrix4x4 } from '../misc/Matrix4x4';
 import { Vector4 } from '../misc/Vector4';
-import type { SceneObject } from '../Model/Model';
+import type { Mesh, SceneObject } from '../Model/Model';
 
 class View {
     // GPU related
@@ -18,6 +18,8 @@ class View {
     private fov = 30; // field of view in degrees
     private near = 0.1; // near plane distance
     private far = 1000; // far plane distance
+    private meshes: { [id: string]: Mesh } = {};
+
 
     // Scene
     private sceneObjects: SceneObject[] = [];
@@ -133,17 +135,21 @@ class View {
         this.camera = camera;
     }
 
+    uploadMeshes(meshes:{[id:string]:Mesh}):void{
+        this.meshes=meshes
+    }
+
     private async uploadMeshBuffers() {
         if (!this.device) return;
         for (const obj of this.sceneObjects) {
-            if (this.objectBuffers.has(obj.props.mesh!.id)) continue;
-            const v = obj.props.mesh!.vertices;
-            const i = obj.props.mesh!.indices;
+            if (this.objectBuffers.get(obj.props.mesh!)) continue;
+            const v = this.meshes[obj.props.mesh!].vertices;
+            const i = this.meshes[obj.props.mesh!].indices;
             const vertexBuffer = this.device.createBuffer({ size: v.byteLength, usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST });
             this.device.queue.writeBuffer(vertexBuffer, 0, v.buffer as ArrayBuffer, v.byteOffset, v.byteLength);
             const indexBuffer = this.device.createBuffer({ size: i.byteLength, usage: GPUBufferUsage.INDEX | GPUBufferUsage.COPY_DST });
             this.device.queue.writeBuffer(indexBuffer, 0, i.buffer as ArrayBuffer, i.byteOffset, i.byteLength);
-            this.objectBuffers.set(obj.props.mesh!.id, { vertexBuffer, indexBuffer, indices: i });
+            this.objectBuffers.set(obj.props.mesh!, { vertexBuffer, indexBuffer, indices: i });
         }
     }
 
@@ -208,8 +214,8 @@ class View {
             let instanceIndex = 0;
             let buf;
             for (const obj of this.sceneObjects) {
-                if (obj.props.mesh!.id !== currentMeshId) {
-                    buf = this.objectBuffers.get(obj.props.mesh!.id);
+                if (obj.props.mesh !== currentMeshId) {
+                    buf = this.objectBuffers.get(obj.props.mesh!);
                     instanceIndex++;
                     if (!buf) continue;
 

@@ -18,22 +18,23 @@ if (!document.querySelector('#app')) {
     const view = new View();
     const model = new Model();
 
+    view.uploadMeshes(model.getMeshes())
     await view.initWebGPU(setUpCanvas());
     const debugEl = setupDebugElement()
     view.setDebugElement(debugEl);
 
-    model.addCamera('main-camera', new Vector4(0, 0, 10, 1));
-    for (let i = 0; i < 30; i++) {
-        for (let j = 0; j < 10; j++) {
-            for (let k = 0; k < 30; k++) {
-                model.addCube(`cube-${i}-${j}-${k}`, 0.2, new Vector4(i * 2, j * 2, k * 2, 2));
+    model.addCamera('main-camera', new Vector4(1, 1, 1, 1), Matrix4x4.prototype.rotationalMatrix(new Vector4(0,4,0,0)));
+    for (let i = 0; i < 50; i++) {
+        for (let j = 0; j < 50; j++) {
+            for (let k = 0; k < 50; k++) {
+                model.addCube(`cube-${i}-${j}-${k}`, 0.2, new Vector4(i * i/10, j*3, k*3, 2));
             }
         }
     }
 
 
-    await view.registerSceneObjects(model.getObjects(), true);
 
+    await view.registerSceneObjects(model.getObjects(), true);
 
     // Camera control state
     const cam = model.getCamera('main-camera');
@@ -76,9 +77,10 @@ if (!document.querySelector('#app')) {
         model.update(delta * 1000);
 
         // movement: WASD for planar movement, space/up for up, ctrl/down for down
-        const speedBase = keys.has('shift') ? -10 : -3; // units per second
+        const speedBase = keys.has('shift') ? -20 : -3; // units per second
         const forward = new Vector4(0, 0, speedBase * delta, 0)
         const right = new Vector4(speedBase * delta, 0, 0, 0)
+        const up = new Vector4(0, speedBase * delta, 0, 0);
 
         if (keys.has('w')) {
             cam.position = cam.position.add(model.requestInverseRotation(cam).mul(forward))
@@ -92,7 +94,12 @@ if (!document.querySelector('#app')) {
         if (keys.has('d')) {
             cam.position = cam.position.sub(model.requestInverseRotation(cam).mul(right))
         }
-
+        if (keys.has(' ')) {
+            cam.position = cam.position.sub(model.requestInverseRotation(cam).mul(up));
+        }
+        if (keys.has('control')) {
+            cam.position = cam.position.add(model.requestInverseRotation(cam).mul(up));
+        }
         // push camera update into model
         model.updateCamera('main-camera', cam.position, cam.rotation);
         renderLoop()

@@ -7,7 +7,7 @@ export type SceneObject = {
     rotation: Matrix4x4;
     scale: Vector4;
     props: {
-        mesh?: Mesh
+        mesh?: string
         LOD?: number; //TODO
         inverseRotation?: Matrix4x4
         updateInverseRotation?: boolean //to compute as less inverse matrices as possible
@@ -25,6 +25,13 @@ export default class Model {
     private cameras: SceneObject[] = [];
     private meshes: { [id: string]: Mesh } = {};
 
+    getMesh(id:string){
+        return this.meshes[id]
+    }
+    getMeshes(){
+        return this.meshes
+    }
+    
     constructor() {
         this.meshes["builtin-sphere"] = { id: "builtin-sphere", ...this.generateSphereMesh(20, 20, 1) }
         this.meshes["builtin-cube"] = { id: "builtin-cube", ...this.generateCubeMesh(1) }
@@ -96,24 +103,22 @@ export default class Model {
     }
 
     addSphere(id: string, radius?:number, position?: Vector4, rotation?: Matrix4x4) {
-        const sphereMesh: Mesh = this.meshes["builtin-sphere"];
         this.objects.push({
             id,
             position: position ?? new Vector4(0, 0, 0, 1),
             rotation: rotation ?? Matrix4x4.prototype.identity(),
             scale: radius?new Vector4(radius, radius, radius, 1):new Vector4(1,1,1,1), // default scale
-            props: { mesh: sphereMesh }
+            props: { mesh: "builtin-sphere" }
         });
     }
 
     addCube(id: string, size = 1, position?: Vector4, rotation?: Matrix4x4) {
-        let cubeMesh: Mesh = this.meshes["builtin-cube"];
         this.objects.push({
             id,
             position: position ?? new Vector4(0, 0, 0, 1),
             rotation: rotation ?? Matrix4x4.prototype.identity(),
             scale: new Vector4(size, size, size, 1), // default scale
-            props: { mesh: cubeMesh }
+            props: { mesh: "builtin-cube" }
         });
     }
 
