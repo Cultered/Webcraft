@@ -1,23 +1,36 @@
 import { Vector4 } from '../misc/Vector4';
+import { Matrix4x4 } from '../misc/Matrix4x4';
 
 export type SceneObject = {
     id: string;
     position: Vector4;
-    rotation: Vector4;
+    rotation: Matrix4x4;
     scale: Vector4;
     props: {
-        vertices: Float32Array;
-        indices: Uint32Array | Uint16Array;
+        mesh?: Mesh
+        LOD?: number; //TODO
+        inverseRotation?: Matrix4x4
+        updateInverseRotation?: boolean //to compute as less inverse matrices as possible
     };
 };
+
+export type Mesh = {
+    id: string;
+    vertices: Float32Array;
+    indices: Uint32Array | Uint16Array;
+}
 
 export default class Model {
     private objects: SceneObject[] = [];
     private cameras: SceneObject[] = [];
+    private meshes: { [id: string]: Mesh } = {};
 
-    constructor() { }
+    constructor() {
+        this.meshes["builtin-sphere"] = { id: "builtin-sphere", ...this.generateSphereMesh(20, 20, 1) }
+        this.meshes["builtin-cube"] = { id: "builtin-cube", ...this.generateCubeMesh(1) }
+    }
     // TODO sphere generation based on triangulation of an octahedron
-    private generateIndexedSphere(lati: number, longi: number, radius: number) {
+    private generateSphereMesh(lati: number, longi: number, radius: number) {
         const vertices: number[] = [];
         const indices: number[] = [];
 
@@ -54,7 +67,7 @@ export default class Model {
         };
     }
 
-    private generateCube(size: number) {
+    private generateCubeMesh(size: number) {
         const hs = size / 2;
         const vertices = [
             -hs, -hs, -hs,
@@ -82,25 +95,25 @@ export default class Model {
         };
     }
 
-    addSphere(id: string, lati = 32, longi = 32, radius = 1, position?: Vector4, rotation?: Vector4) {
-        const { vertices, indices } = this.generateIndexedSphere(lati, longi, radius);
+    addSphere(id: string, radius?:number, position?: Vector4, rotation?: Matrix4x4) {
+        const sphereMesh: Mesh = this.meshes["builtin-sphere"];
         this.objects.push({
             id,
             position: position ?? new Vector4(0, 0, 0, 1),
-            rotation: rotation ?? new Vector4(0, 0, 0, 0),
-            scale: new Vector4(1, 1, 1, 1), // default scale
-            props: { vertices, indices }
+            rotation: rotation ?? Matrix4x4.prototype.identity(),
+            scale: radius?new Vector4(radius, radius, radius, 1):new Vector4(1,1,1,1), // default scale
+            props: { mesh: sphereMesh }
         });
     }
 
-    addCube(id: string, size = 1, position?: Vector4, rotation?: Vector4) {
-        const { vertices, indices } = this.generateCube(size);
+    addCube(id: string, size = 1, position?: Vector4, rotation?: Matrix4x4) {
+        let cubeMesh: Mesh = this.meshes["builtin-cube"];
         this.objects.push({
             id,
             position: position ?? new Vector4(0, 0, 0, 1),
-            rotation: rotation ?? new Vector4(0, 0, 0, 0),
-            scale: new Vector4(1, 1, 1, 1), // default scale
-            props: { vertices, indices }
+            rotation: rotation ?? Matrix4x4.prototype.identity(),
+            scale: new Vector4(size, size, size, 1), // default scale
+            props: { mesh: cubeMesh }
         });
     }
 
@@ -108,21 +121,18 @@ export default class Model {
         return this.objects;
     }
 
-    addCamera(id: string, position?: Vector4, rotation?: Vector4) {
+    addCamera(id: string, position?: Vector4, rotation?: Matrix4x4) {
         const camera: SceneObject = {
             id,
             position: position ?? new Vector4(0, 0, 4, 1), // default camera position
-            rotation: rotation ?? new Vector4(0, 0, 0, 0), // default camera rotation
+            rotation: rotation ?? Matrix4x4.prototype.identity(), // default camera rotation
             scale: new Vector4(1, 1, 1, 1), // default scale
-            props: {
-                vertices: new Float32Array([]), // no vertices for camera
-                indices: new Uint32Array([]) // no indices for camera
-            }
+            props: {}
         };
         this.cameras.push(camera);
     }
 
-    updateCamera(id: string, position: Vector4, rotation: Vector4) {
+    updateCamera(id: string, position: Vector4, rotation: Matrix4x4) {
         const camera = this.cameras.find(cam => cam.id === id);
         if (camera) {
             camera.position = position;
@@ -136,17 +146,26 @@ export default class Model {
         return this.cameras.find(camera => camera.id === id) || {
             id: 'default-camera',
             position: new Vector4(0, 0, 4, 1),
-            rotation: new Vector4(0, 0, 0, 0),
+            rotation: Matrix4x4.prototype.identity(),
             scale: new Vector4(1, 1, 1, 1),
-            props: { vertices: new Float32Array([]), indices: new Uint32Array([]) }
+            props: {}
         };
     }
 
+    requestInverseRotation(obj: SceneObject): Matrix4x4 {
+        let newInverse = obj.props.inverseRotation
+        if (obj.props.updateInverseRotation || !newInverse) {
+            newInverse = obj.rotation.inverse()
+            obj.props.inverseRotation = newInverse
+            obj.props.updateInverseRotation = false
+        }
+        return newInverse
+    }
+
     update(deltaMs: number) {
-        // simple rotation update for all objects
         for (const obj of this.objects) {
-            obj.rotation.x += 0.001 * deltaMs;
-            obj.rotation.y += 0.001 * deltaMs;
+            const rm = Matrix4x4.prototype.rotationalMatrix(new Vector4(0.01, 0.01, 0, 0))
+            obj.rotation = obj.rotation.mulMatrix(rm)
         }
     }
 }

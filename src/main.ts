@@ -3,6 +3,7 @@ import Model from './Model/Model';
 import { Vector4 } from './misc/Vector4';
 import { setupDebugElement } from './misc/setupDebugElement';
 import { setUpCanvas } from './misc/setUpCanvas';
+import { Matrix4x4 } from './misc/Matrix4x4';
 
 console.log('starting app');
 
@@ -18,27 +19,24 @@ if (!document.querySelector('#app')) {
     const model = new Model();
 
     await view.initWebGPU(setUpCanvas());
-    const debugEl =setupDebugElement()
+    const debugEl = setupDebugElement()
     view.setDebugElement(debugEl);
 
-    model.addCamera('main-camera', new Vector4(0, 0, 10, 1), new Vector4(0, 0, 0, 1));
-    for (let i = 0; i < 100; i++) {
+    model.addCamera('main-camera', new Vector4(0, 0, 10, 1));
+    for (let i = 0; i < 30; i++) {
         for (let j = 0; j < 10; j++) {
-            for (let k = 0; k < 10; k++) {
-                model.addSphere(`sphere-${i}-${j}-${k}`, 10, 5, 0.5, new Vector4(i * 2, j * 2, k * 2, 2));
+            for (let k = 0; k < 30; k++) {
+                model.addCube(`cube-${i}-${j}-${k}`, 0.2, new Vector4(i * 2, j * 2, k * 2, 2));
             }
         }
     }
-    
 
-    await view.registerSceneObjects(model.getObjects(),true);
+
+    await view.registerSceneObjects(model.getObjects(), true);
 
 
     // Camera control state
     const cam = model.getCamera('main-camera');
-    let camPos = { x: cam.position.x, y: cam.position.y, z: cam.position.z };
-    let yaw = cam.rotation.y || 0; // horizontal
-    let pitch = cam.rotation.x || 0; // vertical
 
     const keys = new Set<string>();
     window.addEventListener('keydown', (e) => keys.add(e.key.toLowerCase()));
@@ -60,10 +58,13 @@ if (!document.querySelector('#app')) {
     });
 
     function onMouseMove(e: MouseEvent) {
-        yaw -= e.movementX * mouseSensitivity;
-        pitch -= e.movementY * mouseSensitivity;
-        const maxPitch = Math.PI / 2 - 0.01;
-        pitch = Math.max(-maxPitch, Math.min(maxPitch, pitch));
+        const dy = e.movementY * mouseSensitivity;//x axis rotation
+        const dx = e.movementX * mouseSensitivity;//y axis rotation
+        const ry = Matrix4x4.prototype.rotationalMatrix(new Vector4(0, -dx, 0, 0))
+        const rx = Matrix4x4.prototype.rotationalMatrix(new Vector4(-dy, 0, 0, 0))
+        cam.rotation = (rx.mulMatrix(ry.mulMatrix(cam.rotation)))
+        cam.props.updateInverseRotation = true
+        model.updateCamera('main-camera', cam.position, cam.rotation);
     }
 
     let lastModelTime = performance.now();
@@ -75,50 +76,48 @@ if (!document.querySelector('#app')) {
         model.update(delta * 1000);
 
         // movement: WASD for planar movement, space/up for up, ctrl/down for down
-        const speedBase = keys.has('shift') ? 10 : 3; // units per second
-        const forward = {
-            x: Math.sin(yaw),
-            y: 0,
-            z: Math.cos(yaw),
-        };
-        const right = {
-            x: Math.cos(yaw),
-            y: 0,
-            z: -Math.sin(yaw),
-        };
+        const speedBase = keys.has('shift') ? -10 : -3; // units per second
+        const forward = new Vector4(0, 0, speedBase * delta, 0)
+        const right = new Vector4(speedBase * delta, 0, 0, 0)
+
         if (keys.has('w')) {
-            camPos.x += forward.x * speedBase * delta;
-            camPos.z += forward.z * speedBase * delta;
+            cam.position = cam.position.add(model.requestInverseRotation(cam).mul(forward))
         }
         if (keys.has('s')) {
-            camPos.x -= forward.x * speedBase * delta;
-            camPos.z -= forward.z * speedBase * delta;
+            cam.position = cam.position.sub(model.requestInverseRotation(cam).mul(forward))
         }
         if (keys.has('a')) {
-            camPos.x -= right.x * speedBase * delta;
-            camPos.z -= right.z * speedBase * delta;
+            cam.position = cam.position.add(model.requestInverseRotation(cam).mul(right))
         }
         if (keys.has('d')) {
-            camPos.x += right.x * speedBase * delta;
-            camPos.z += right.z * speedBase * delta;
-        }
-        if (keys.has(' ')) { // space
-            camPos.y += speedBase * delta;
-        }
-        if (keys.has('control') || keys.has('ctrl')) {
-            camPos.y -= speedBase * delta;
+            cam.position = cam.position.sub(model.requestInverseRotation(cam).mul(right))
         }
 
         // push camera update into model
-        model.updateCamera('main-camera', new Vector4(camPos.x, camPos.y, camPos.z, 1), new Vector4(pitch, yaw, 0, 0));
+        model.updateCamera('main-camera', cam.position, cam.rotation);
+        renderLoop()
     };
     setInterval(modelLoop, 1000 / 60);
 
     const renderLoop = () => {
-        view.registerSceneObjects(model.getObjects(),false).catch(err => console.error('registerSceneObjects failed', err));
+        view.registerSceneObjects(model.getObjects(), false).catch(err => console.error('registerSceneObjects failed', err));
         view.registerCamera(model.getCamera("main-camera"));
         view.render();
-        requestAnimationFrame(renderLoop);
+        // FPS calculation
+        if (!renderLoop.hasOwnProperty('lastTime')) {
+            (renderLoop as any).lastTime = performance.now();
+            (renderLoop as any).frameCount = 0;
+            (renderLoop as any).fps = 0;
+        }
+        (renderLoop as any).frameCount++;
+        const now = performance.now();
+        const lastTime = (renderLoop as any).lastTime;
+        if (now - lastTime >= 1000) {
+            (renderLoop as any).fps = (renderLoop as any).frameCount;
+            (renderLoop as any).frameCount = 0;
+            (renderLoop as any).lastTime = now;
+        }
+        const fps = (renderLoop as any).fps;
+        debugEl.innerText += `\nFPS: ${fps}`;
     };
-    requestAnimationFrame(renderLoop);
 })();

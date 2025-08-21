@@ -14,7 +14,7 @@ class View {
     private objectBuffers = new Map<string, { vertexBuffer: GPUBuffer; indexBuffer: GPUBuffer; indices: Uint32Array | Uint16Array }>();
     private bindGroup?: GPUBindGroup;
     private storageBuffer?: GPUBuffer; // view/projection
-    public maxObjects = 10000; // max objects in scene, dynamic
+    public maxObjects = 1000000; // max objects in scene, dynamic
     private fov = 30; // field of view in degrees
     private near = 0.1; // near plane distance
     private far = 1000; // far plane distance
@@ -24,9 +24,9 @@ class View {
     private camera: SceneObject = {
         id: 'viewCamera',
         position: new Vector4(0, 0, 0, 1),
-        rotation: new Vector4(0, 0, 0, 0),
+        rotation: Matrix4x4.prototype.identity(),
         scale: new Vector4(1, 1, 1, 1),
-        props: { vertices: new Float32Array(), indices: new Uint32Array() }
+        props: {}
     };
 
     // Helper matrix instance for creating projection/rotation matrices
@@ -136,14 +136,14 @@ class View {
     private async uploadMeshBuffers() {
         if (!this.device) return;
         for (const obj of this.sceneObjects) {
-            if (this.objectBuffers.has(obj.id)) continue;
-            const v = obj.props.vertices;
-            const i = obj.props.indices;
+            if (this.objectBuffers.has(obj.props.mesh!.id)) continue;
+            const v = obj.props.mesh!.vertices;
+            const i = obj.props.mesh!.indices;
             const vertexBuffer = this.device.createBuffer({ size: v.byteLength, usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST });
             this.device.queue.writeBuffer(vertexBuffer, 0, v.buffer as ArrayBuffer, v.byteOffset, v.byteLength);
             const indexBuffer = this.device.createBuffer({ size: i.byteLength, usage: GPUBufferUsage.INDEX | GPUBufferUsage.COPY_DST });
             this.device.queue.writeBuffer(indexBuffer, 0, i.buffer as ArrayBuffer, i.byteOffset, i.byteLength);
-            this.objectBuffers.set(obj.id, { vertexBuffer, indexBuffer, indices: i });
+            this.objectBuffers.set(obj.props.mesh!.id, { vertexBuffer, indexBuffer, indices: i });
         }
     }
 
@@ -204,20 +204,25 @@ class View {
             passEncoder.setPipeline(this.renderPipeline);
 
             // draw each registered object
+            let currentMeshId: string = "empty";
             let instanceIndex = 0;
+            let buf;
             for (const obj of this.sceneObjects) {
-                const buf = this.objectBuffers.get(obj.id);
+                if (obj.props.mesh!.id !== currentMeshId) {
+                    buf = this.objectBuffers.get(obj.props.mesh!.id);
+                    instanceIndex++;
+                    if (!buf) continue;
+
+                    passEncoder.setVertexBuffer(0, buf.vertexBuffer);
+
+                    const indexFormat: GPUIndexFormat = (buf.indices instanceof Uint16Array) ? 'uint16' : 'uint32';
+                    passEncoder.setIndexBuffer(buf.indexBuffer, indexFormat);
+
+                    passEncoder.setBindGroup(0, this.bindGroup);
+                }
                 if (!buf) continue;
 
-                passEncoder.setVertexBuffer(0, buf.vertexBuffer);
-
-                const indexFormat: GPUIndexFormat = (buf.indices instanceof Uint16Array) ? 'uint16' : 'uint32';
-                passEncoder.setIndexBuffer(buf.indexBuffer, indexFormat);
-
-                passEncoder.setBindGroup(0, this.bindGroup);
-
-                passEncoder.drawIndexed(buf.indices.length, 1,0,0,instanceIndex);
-                instanceIndex++;
+                passEncoder.drawIndexed(buf.indices.length, 1, 0, 0, instanceIndex);
             }
 
             passEncoder.end();
@@ -226,6 +231,7 @@ class View {
             // debug
             if (this.debugEl) {
                 this.debugEl.innerText = `WebGPU ready\nObjects: ${this.sceneObjects.length}\nBuffers: ${this.objectBuffers.size}`;
+                this.debugEl.innerText += `\nCamerar: x${this.camera.position.x} y${this.camera.position.y} z${this.camera.position.z}`;
             }
         } catch (e) {
             console.error('Render error:', e);
