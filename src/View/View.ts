@@ -26,13 +26,11 @@ class View {
     private camera: SceneObject = {
         id: 'viewCamera',
         position: new Vector4(0, 0, 0, 1),
-        rotation: Matrix4x4.prototype.identity(),
+        rotation: Matrix4x4.identity(),
         scale: new Vector4(1, 1, 1, 1),
         props: {}
     };
 
-    // Helper matrix instance for creating projection/rotation matrices
-    private matrixHelper = new Matrix4x4(new Vector4(1, 0, 0, 0), new Vector4(0, 1, 0, 0), new Vector4(0, 0, 1, 0), new Vector4(0, 0, 0, 1));
     // debug
     private debugEl?: HTMLDivElement;
 
@@ -171,7 +169,7 @@ class View {
         for (let i = 0; i < objects.length; i++) {
             const obj = objects[i];
             const offset = i * 16; // 4x4 matrix
-            const matrix = this.matrixHelper.renderMatrix(
+            const matrix = Matrix4x4.renderMatrix(
                 obj.scale, obj.rotation, obj.position,
                 this.camera.position, this.camera.rotation,
                 this.fov, (this.canvas!.width) / (this.canvas!.height), this.near, this.far

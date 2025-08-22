@@ -106,7 +106,7 @@ export default class Model {
         this.objects.push({
             id,
             position: position ?? new Vector4(0, 0, 0, 1),
-            rotation: rotation ?? Matrix4x4.prototype.identity(),
+            rotation: rotation ?? Matrix4x4.identity(),
             scale: radius?new Vector4(radius, radius, radius, 1):new Vector4(1,1,1,1), // default scale
             props: { mesh: "builtin-sphere" }
         });
@@ -116,7 +116,7 @@ export default class Model {
         this.objects.push({
             id,
             position: position ?? new Vector4(0, 0, 0, 1),
-            rotation: rotation ?? Matrix4x4.prototype.identity(),
+            rotation: rotation ?? Matrix4x4.identity(),
             scale: new Vector4(size, size, size, 1), // default scale
             props: { mesh: "builtin-cube" }
         });
@@ -130,7 +130,7 @@ export default class Model {
         const camera: SceneObject = {
             id,
             position: position ?? new Vector4(0, 0, 4, 1), // default camera position
-            rotation: rotation ?? Matrix4x4.prototype.identity(), // default camera rotation
+            rotation: rotation ?? Matrix4x4.identity(), // default camera rotation
             scale: new Vector4(1, 1, 1, 1), // default scale
             props: {}
         };
@@ -151,7 +151,7 @@ export default class Model {
         return this.cameras.find(camera => camera.id === id) || {
             id: 'default-camera',
             position: new Vector4(0, 0, 4, 1),
-            rotation: Matrix4x4.prototype.identity(),
+            rotation: Matrix4x4.identity(),
             scale: new Vector4(1, 1, 1, 1),
             props: {}
         };
@@ -169,7 +169,7 @@ export default class Model {
 
     update(deltaMs: number) {
         for (const obj of this.objects) {
-            const rm = Matrix4x4.prototype.rotationalMatrix(new Vector4(0.01, 0.01, 0, 0))
+            const rm = Matrix4x4.rotationalMatrix(new Vector4(0.01, 0.01, 0, 0))
             obj.rotation = obj.rotation.mulMatrix(rm)
         }
     }

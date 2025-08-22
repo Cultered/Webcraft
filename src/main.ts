@@ -23,10 +23,10 @@ if (!document.querySelector('#app')) {
     const debugEl = setupDebugElement()
     view.setDebugElement(debugEl);
 
-    model.addCamera('main-camera', new Vector4(1, 1, 1, 1), Matrix4x4.prototype.rotationalMatrix(new Vector4(0,4,0,0)));
-    for (let i = 0; i < 50; i++) {
-        for (let j = 0; j < 50; j++) {
-            for (let k = 0; k < 50; k++) {
+    model.addCamera('main-camera', new Vector4(1, 1, 1, 1), Matrix4x4.rotationalMatrix(new Vector4(0,4,0,0)));
+    for (let i = 0; i < 20; i++) {
+        for (let j = 0; j < 20; j++) {
+            for (let k = 0; k < 20; k++) {
                 model.addCube(`cube-${i}-${j}-${k}`, 0.2, new Vector4(i * i/10, j*3, k*3, 2));
             }
         }
@@ -61,8 +61,8 @@ if (!document.querySelector('#app')) {
     function onMouseMove(e: MouseEvent) {
         const dy = e.movementY * mouseSensitivity;//x axis rotation
         const dx = e.movementX * mouseSensitivity;//y axis rotation
-        const ry = Matrix4x4.prototype.rotationalMatrix(new Vector4(0, -dx, 0, 0))
-        const rx = Matrix4x4.prototype.rotationalMatrix(new Vector4(-dy, 0, 0, 0))
+        const ry = Matrix4x4.rotationalMatrix(new Vector4(0, -dx, 0, 0))
+        const rx = Matrix4x4.rotationalMatrix(new Vector4(-dy, 0, 0, 0))
         cam.rotation = (rx.mulMatrix(ry.mulMatrix(cam.rotation)))
         cam.props.updateInverseRotation = true
         model.updateCamera('main-camera', cam.position, cam.rotation);
@@ -78,9 +78,9 @@ if (!document.querySelector('#app')) {
 
         // movement: WASD for planar movement, space/up for up, ctrl/down for down
         const speedBase = keys.has('shift') ? -20 : -3; // units per second
-        const forward = new Vector4(0, 0, speedBase * delta, 0)
-        const right = new Vector4(speedBase * delta, 0, 0, 0)
-        const up = new Vector4(0, speedBase * delta, 0, 0);
+        const forward = Vector4.forward().scale(speedBase * delta)
+        const right = Vector4.right().scale(speedBase * delta)
+        const up = Vector4.up().scale(speedBase * delta)
 
         if (keys.has('w')) {
             cam.position = cam.position.add(model.requestInverseRotation(cam).mul(forward))

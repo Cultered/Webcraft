@@ -9,6 +9,15 @@ export class Vector4 {
         this.z = z;
         this.w = w;
     }
+    static up():Vector4{
+        return new Vector4(0,1,0,0)
+    }
+    static right():Vector4{
+        return new Vector4(1,0,0,0)
+    }
+    static forward():Vector4{
+        return new Vector4(0,0,1,0)
+    }
     neg():Vector4{
         return new Vector4(-this.x,-this.y,-this.z,-this.w)
     }
@@ -18,10 +27,14 @@ export class Vector4 {
     sub(other:Vector4):Vector4{
         return this.add(other.neg())
     }
+    scale(q:number):Vector4{
+        return new Vector4(this.x*q,this.y*q,this.z*q,this.w*q)
+    }
     mul(other:Vector4):Vector4{
         return new Vector4(this.x*other.x,this.y*other.y,this.z*other.z,this.w*other.w)
     }
     toFloat32Array():Float32Array {
         return new Float32Array([this.x, this.y, this.z, this.w]);
     }
+    
 }

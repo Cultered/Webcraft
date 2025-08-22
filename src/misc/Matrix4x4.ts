@@ -11,7 +11,7 @@ export class Matrix4x4 {
         this.vec3 = vec3; // vec4<f32>
         this.vec4 = vec4; // vec4<f32>
     }
-    identity(): Matrix4x4{
+    static identity(): Matrix4x4{
         return new Matrix4x4(
             new Vector4(1,0,0,0),
             new Vector4(0,1,0,0),
@@ -35,7 +35,7 @@ export class Matrix4x4 {
             this.mul(other.vec4)
         );
     }
-    translationMatrix(vec: Vector4): Matrix4x4 {
+    static translationMatrix(vec: Vector4): Matrix4x4 {
         /**Create a translate matrix, w component should be 1, otherwise it will be converted to 1 implicitly */
         if (vec.w !== 1) {
             console.warn("Matrix4x4.transposeMatrix: w component of vector should be 1, got", vec.w);
@@ -48,7 +48,7 @@ export class Matrix4x4 {
             new Vector4(vec.x, vec.y, vec.z, vec.w)
         )
     }
-    rotationalMatrix(angle: Vector4): Matrix4x4 {
+    static rotationalMatrix(angle: Vector4): Matrix4x4 {
         /**Create a rotation matrix around x,y,z; w is ignored */
         let cosX = Math.cos(angle.x);
         let sinX = Math.sin(angle.x);
@@ -81,7 +81,7 @@ export class Matrix4x4 {
         // Combine rotations: Z * Y * X (common convention)
         return rotZ.mulMatrix(rotY).mulMatrix(rotX);
     }
-    scaleMatrix(vec: Vector4): Matrix4x4 {
+    static scaleMatrix(vec: Vector4): Matrix4x4 {
         if(vec.w != 1){
             console.warn("You are scaling with w, probably not something you want, ", vec)
         }
@@ -92,7 +92,7 @@ export class Matrix4x4 {
             new Vector4(0, 0, 0, vec.w)
         );
     }
-    projectionMatrix(fovY: number, aspect: number, near: number, far: number): Matrix4x4 {
+    static projectionMatrix(fovY: number, aspect: number, near: number, far: number): Matrix4x4 {
         /**WGSL projection matrix (dont use with GLSL etc) */
         let f = 1.0 / Math.tan(radians(fovY) * 0.5);
         let nf = 1.0 / (near - far);
@@ -104,7 +104,7 @@ export class Matrix4x4 {
         );
         return proj;
     }
-    renderMatrix(scale:Vector4,rotate:Matrix4x4,translate:Vector4, camPos:Vector4,camRotate:Matrix4x4,fovY: number, aspect: number, near: number, far: number): Matrix4x4 {
+    static renderMatrix(scale:Vector4,rotate:Matrix4x4,translate:Vector4, camPos:Vector4,camRotate:Matrix4x4,fovY: number, aspect: number, near: number, far: number): Matrix4x4 {
         /**Example of how to create a render matrix, but you should consider not using this cos like performance */
         let scaleMatrix = this.scaleMatrix(scale);
         let translateMatrix = this.translationMatrix(translate.sub(camPos));
@@ -242,7 +242,7 @@ export class Matrix4x4 {
 
         if (det === 0) {
             console.warn('Matrix4x4.inverse: matrix is singular, returning identity');
-            return this.identity();
+            return Matrix4x4.identity();
         }
 
         det = 1.0 / det;
