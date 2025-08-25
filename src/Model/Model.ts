@@ -1,16 +1,17 @@
 import { Vector4 } from '../misc/Vector4';
 import { Matrix4x4 } from '../misc/Matrix4x4';
+import { Entity } from './Entity';
 
+// keep old SceneObject shape for compatibility with View
 export type SceneObject = {
     id: string;
-    // position should be treated as read-only; use Model.setObjectPosition to change
     position: Vector4;
     rotation: Matrix4x4;
     scale: Vector4;
     props: {
         mesh?: string
         inverseRotation?: Matrix4x4
-        updateInverseRotation?: boolean //to compute as less inverse matrices as possible
+        updateInverseRotation?: boolean
         chunkKey?: string
     };
 };
@@ -27,14 +28,17 @@ export type Mesh = {
 }
 
 export default class Model {
-    private objects: SceneObject[] = [];
-    private cameras: SceneObject[] = [];
-    // Map chunkKey -> objects contained
-    private chunks: Map<string, SceneObject[]> = new Map();
+    private entities: Entity[] = [];
+    private entityMap: Map<string, Entity> = new Map();
+    private cameras: Entity[] = [];
+    // Map chunkKey -> entity ids contained
+    private chunks: Map<string, string[]> = new Map();
     private meshes: { [id: string]: Mesh } = {};
-    // Cached visible objects for the current camera chunk to avoid repeated recalculation
-    private cachedVisibleObjects: SceneObject[] = [];
+    // Cached visible object ids for the current camera chunk to avoid repeated recalculation
+    private cachedVisibleObjects: string[] = [];
     private lastCameraChunkKey?: string;
+    // Callback invoked when visible scene objects may have changed. Assign from caller (e.g., main) to re-register in View.
+    public onSceneObjectsUpdated?: (objects: SceneObject[], updateVertices: boolean) => void;
 
     getMesh(id: string) {
         return this.meshes[id]
@@ -114,96 +118,74 @@ export default class Model {
     }
 
     addSphere(id: string, radius?: number, position?: Vector4, rotation?: Matrix4x4) {
-        const pos = position ?? new Vector4(0, 0, 0, 1);
-        const obj: any = {
-            id,
-            // internal storage of position; expose via getter to make it effectively immutable
-            _position: pos,
-            get position() { return this._position; },
-            rotation: rotation ?? Matrix4x4.identity(),
-            scale: radius ? new Vector4(radius, radius, radius, 1) : new Vector4(1, 1, 1, 1), // default scale
-            props: { mesh: "builtin-sphere" }
-        };
-        this.objects.push(obj as SceneObject);
-        this.assignToChunk(obj as SceneObject);
+        const ent = new Entity(id, position, rotation, radius ? new Vector4(radius, radius, radius, 1) : undefined);
+        ent.props.mesh = 'builtin-sphere';
+        // internal use stores position directly; keep getter semantics via the Entity.position field
+    this.entities.push(ent);
+    this.entityMap.set(ent.id, ent);
+    this.assignToChunk(ent);
     }
 
     addCube(id: string, size = 1, position?: Vector4, rotation?: Matrix4x4) {
-        const pos = position ?? new Vector4(0, 0, 0, 0);
-        const obj: any = {
-            id,
-            _position: pos,
-            get position() { return this._position; },
-            rotation: rotation ?? Matrix4x4.identity(),
-            scale: new Vector4(size, size, size, 1), // default scale
-            props: { mesh: "builtin-cube" }
-        };
-        this.objects.push(obj as SceneObject);
-        this.assignToChunk(obj as SceneObject);
+        const ent = new Entity(id, position, rotation, new Vector4(size, size, size, 1));
+        ent.props.mesh = 'builtin-cube';
+    this.entities.push(ent);
+    this.entityMap.set(ent.id, ent);
+    this.assignToChunk(ent);
     }
 
     // Returns objects that are within RENDER_DISTANCE (in chunks) from the primary camera ("main-camera").
     // This keeps the view focused only on nearby chunks. If no camera exists, return all objects as fallback.
+    // Return SceneObject[] shaped view for compatibility with View.ts
     getObjects() {
         const camera = this.getCamera('main-camera');
-        if (!camera) return this.objects;
+        if (!camera) return this.entities.map(e => this.entityToSceneObject(e));
 
         const camPos = camera.position;
         const camChunk = this.chunkCoordsFromPosition(camPos);
         const camChunkKey = `${camChunk.x},${camChunk.y},${camChunk.z}`;
 
-        // compute camera forward for optional soft frustum culling and to detect rotation changes
         const cameraForward: Vector4 = camera.rotation.inverse().mul(Vector4.forward().neg());
 
-        // if nothing changed, return cached result
-        if (this.lastCameraChunkKey === camChunkKey ) {
-
-            return this.cachedVisibleObjects;
+        if (this.lastCameraChunkKey === camChunkKey) {
+            // map cached ids back to SceneObject view
+            return this.cachedVisibleObjects.map(id => this.entityMap.get(id)).filter(Boolean).map(e => this.entityToSceneObject(e!));
         }
 
-        const collected = new Set<SceneObject>();
-
-
-        // iterate neighboring chunks within render distance
+    const collected = new Set<string>();
         for (let dx = -RENDER_DISTANCE; dx <= RENDER_DISTANCE; dx++) {
             for (let dy = -RENDER_DISTANCE; dy <= RENDER_DISTANCE; dy++) {
                 for (let dz = -RENDER_DISTANCE; dz <= RENDER_DISTANCE; dz++) {
-                    if (dx * dx + dy * dy + dz * dz > RENDER_DISTANCE * RENDER_DISTANCE) continue; //spherical distance check
+                    if (dx * dx + dy * dy + dz * dz > RENDER_DISTANCE * RENDER_DISTANCE) continue;
                     if (CPU_SOFT_FRUSTUM_CULLING) {
-                        if (cameraForward.mul(new Vector4(dx, dy, dz, 0)) < 0) continue; // dot product negative = behind camera
+                        if (cameraForward.mul(new Vector4(dx, dy, dz, 0)) < 0) continue;
                     }
                     const key = `${camChunk.x + dx},${camChunk.y + dy},${camChunk.z + dz}`;
-                    const objs = this.chunks.get(key);
-                    if (objs) objs.forEach(o => collected.add(o));
+                    const ids = this.chunks.get(key);
+                    if (ids) ids.forEach(id => collected.add(id));
                 }
             }
         }
 
-        this.cachedVisibleObjects = Array.from(collected);
+    // store cached visible ids; map back to SceneObject when returning
+    this.cachedVisibleObjects = Array.from(collected);
         this.lastCameraChunkKey = camChunkKey;
-        return this.cachedVisibleObjects;
+    return this.cachedVisibleObjects.map(id => this.entityMap.get(id)).filter(Boolean).map(e => this.entityToSceneObject(e!));
     }
 
     // Public API to move an object. Position is effectively immutable from outside except via this call.
     setObjectPosition(id: string, newPos: Vector4) {
-        const obj = this.objects.find(o => o.id === id) as any;
-        if (!obj) return false;
-        const oldChunk = obj.props.chunkKey;
-        obj._position = newPos;
-        // update chunk assignment
-        this.updateChunkAssignment(obj as SceneObject, oldChunk);
+    const ent = this.entityMap.get(id) ?? this.entities.find(o => o.id === id);
+        if (!ent) return false;
+        const oldChunk = ent.props.chunkKey;
+        ent.position = newPos;
+        this.updateChunkAssignment(ent, oldChunk);
         return true;
     }
 
     addCamera(id: string, position?: Vector4, rotation?: Matrix4x4) {
-        const camera: SceneObject = {
-            id,
-            position: position ?? new Vector4(0, 0, 4, 1), // default camera position
-            rotation: rotation ?? Matrix4x4.identity(), // default camera rotation
-            scale: new Vector4(1, 1, 1, 1), // default scale
-            props: {}
-        };
-        this.cameras.push(camera);
+        const cam = new Entity(id, position ?? new Vector4(0, 0, 4, 1), rotation ?? Matrix4x4.identity(), new Vector4(1, 1, 1, 1));
+        this.cameras.push(cam);
     }
 
     updateCamera(id: string, position: Vector4, rotation: Matrix4x4) {
@@ -216,14 +198,8 @@ export default class Model {
         }
     }
 
-    getCamera(id: string): SceneObject {
-        return this.cameras.find(camera => camera.id === id) || {
-            id: 'default-camera',
-            position: new Vector4(0, 0, 4, 1),
-            rotation: Matrix4x4.identity(),
-            scale: new Vector4(1, 1, 1, 1),
-            props: {}
-        };
+    getCamera(id: string): Entity {
+        return this.cameras.find(camera => camera.id === id) || new Entity('default-camera', new Vector4(0, 0, 4, 1), Matrix4x4.identity(), new Vector4(1, 1, 1, 1));
     }
 
     requestInverseRotation(obj: SceneObject): Matrix4x4 {
@@ -245,46 +221,63 @@ export default class Model {
         };
     }
 
-    private assignToChunk(obj: SceneObject) {
-        const coords = this.chunkCoordsFromPosition((obj as any)._position ?? (obj.position as Vector4));
+    private assignToChunk(ent: Entity) {
+        const coords = this.chunkCoordsFromPosition(ent.position);
         const key = `${coords.x},${coords.y},${coords.z}`;
-        let arr = this.chunks.get(key);
-        if (!arr) {
-            arr = [];
-            this.chunks.set(key, arr);
-        }
-        if (!arr.includes(obj)) arr.push(obj);
-        if (!obj.props) obj.props = {} as any;
-        obj.props.chunkKey = key;
+    let arr = this.chunks.get(key);
+    if (!arr) { arr = []; this.chunks.set(key, arr); }
+    if (!arr.includes(ent.id)) arr.push(ent.id);
+    if (!ent.props) ent.props = {} as any;
+    ent.props.chunkKey = key;
     }
 
-    private removeFromChunk(obj: SceneObject, key?: string) {
-        const k = key ?? obj.props.chunkKey;
+    private removeFromChunk(ent: Entity, key?: string) {
+        const k = key ?? ent.props.chunkKey;
         if (!k) return;
         const arr = this.chunks.get(k);
         if (!arr) return;
-        const idx = arr.indexOf(obj);
+        const idx = arr.indexOf(ent.id);
         if (idx >= 0) arr.splice(idx, 1);
         if (arr.length === 0) this.chunks.delete(k);
-        delete obj.props.chunkKey;
+        delete ent.props.chunkKey;
     }
 
-    private updateChunkAssignment(obj: SceneObject, oldChunkKey?: string) {
-        const coords = this.chunkCoordsFromPosition((obj as any)._position ?? (obj.position as Vector4));
+    private updateChunkAssignment(ent: Entity, oldChunkKey?: string) {
+        const coords = this.chunkCoordsFromPosition(ent.position);
         const newKey = `${coords.x},${coords.y},${coords.z}`;
-        const prevKey = oldChunkKey ?? obj.props.chunkKey;
+        const prevKey = oldChunkKey ?? ent.props.chunkKey;
         if (prevKey !== newKey) {
-            this.removeFromChunk(obj, prevKey);
+            this.removeFromChunk(ent, prevKey);
             let arr = this.chunks.get(newKey);
             if (!arr) { arr = []; this.chunks.set(newKey, arr); }
-            arr.push(obj);
-            obj.props.chunkKey = newKey;
+            if (!arr.includes(ent.id)) arr.push(ent.id);
+            ent.props.chunkKey = newKey;
         }
     }
 
     update(deltaMs: number) {
-        const seconds = deltaMs / 1000;
-        const rm = Matrix4x4.rotationalMatrix(new Vector4(0.1 * seconds, 0.1 * seconds, 0, 0));
-        this.objects[1].rotation = this.objects[1].rotation.mulMatrix(rm);
+        // Run entity components
+        for (const e of this.entities) {
+            e.runComponents(deltaMs);
+        }
+    }
+
+    // Helper to convert Entity -> SceneObject shape for compatibility with View
+    private entityToSceneObject(e: Entity): SceneObject {
+        return {
+            id: e.id,
+            position: e.position,
+            rotation: e.rotation,
+            scale: e.scale,
+            props: e.props || {}
+        };
+    }
+
+    // Add a component instance to an entity by id
+    addComponentToEntity(id: string, component: any) {
+        const ent = this.entities.find(e => e.id === id);
+        if (!ent) return false;
+        ent.addComponent(component);
+        return true;
     }
 }

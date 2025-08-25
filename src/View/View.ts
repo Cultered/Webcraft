@@ -26,6 +26,7 @@ class View {
     private sceneObjects: SceneObject[] = [];
     // cache last assigned objects reference to avoid reprocessing
     private lastSceneObjectsRef?: SceneObject[];
+    // (no id->index mapping needed for full uploads)
     // cache camera key to detect changes
     private lastCameraKey?: string;
     private camera: SceneObject = {
@@ -156,20 +157,23 @@ class View {
         // If the exact same array reference was provided and no vertex update is requested,
         // skip heavy work. Model returns a cached array reference per camera chunk, so this
         // avoids recomputing when camera hasn't moved between chunks.
-        if (objects === this.lastSceneObjectsRef && !updateVertices) {
-            return;
-        }
+            if (objects === this.lastSceneObjectsRef && !updateVertices) {
+                // same array reference: avoid re-uploading meshes, but object transforms may have changed
+                // so still update the object storage buffer (full upload)
+                this.updateObjectStorageBufferPartial(objects);
+                return;
+            }
 
         this.sceneObjects = objects;
-        this.lastSceneObjectsRef = objects;
+    // update last reference
+    this.lastSceneObjectsRef = objects;
 
         if (updateVertices) {
             await this.uploadMeshBuffers();
         }
 
-        // update storage buffer for objects (this can be expensive)
-        // Only do it now if objects changed; if only camera changes later, registerCamera will trigger an update.
-        this.updateObjectStorageBuffer(objects);
+    // update storage buffer for objects (full upload each time)
+    this.updateObjectStorageBufferPartial(objects);
     }
     registerCamera(camera: SceneObject) {
         // Build a simple camera key from position and rotation to detect changes.
@@ -188,10 +192,7 @@ class View {
             this.device.queue.writeBuffer(this.cameraBuffer, 0, camTransform.toFloat32Array().buffer);
         }
 
-        // If we already have scene objects, recompute object storage buffer because object matrices depend on camera.
-        if (this.sceneObjects && this.sceneObjects.length) {
-            this.updateObjectStorageBuffer(this.sceneObjects);
-        }
+    // camera transform written above; object model matrices do not depend on camera so we avoid recomputing them here
     }
 
     uploadMeshes(meshes: { [id: string]: Mesh }): void {
@@ -211,31 +212,26 @@ class View {
         }
     }
 
-    private updateObjectStorageBuffer(objects: SceneObject[]) {
+    // Update object storage buffer but only upload changed object matrices when possible.
+    private updateObjectStorageBufferPartial(objects: SceneObject[]) {
         if (!this.device) throw new Error('Device not initialized');
-        this.sceneObjects = objects;
+        // Simplified behavior: always upload all object matrices each call.
         const objectCount = objects.length;
-        if (objectCount > this.maxObjects) {
-            console.warn(`Object count ${objectCount} exceeds maxObjects ${this.maxObjects}, resizing storage buffer`);
-            this.maxObjects = objectCount; // update maxObjects
-            this.objectStorageBuffer?.destroy(); // destroy old buffer
-            this.objectStorageBuffer = this.device.createBuffer({
-                size: 64 * this.maxObjects, // 64 bytes per matrix (4x4)
-                usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST
-            });
+        // resize buffer if needed
+        if (objectCount > this.maxObjects || !this.objectStorageBuffer) {
+            this.maxObjects = Math.max(objectCount, this.maxObjects);
+            this.objectStorageBuffer?.destroy();
+            this.objectStorageBuffer = this.device.createBuffer({ size: 64 * this.maxObjects, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST });
         }
-        const allObjectMatricesBuffer = new Float32Array(objectCount * 16); // 4x4 matrix for each object
-        // update object uniform (position + rotation matrix or similar) into uniform1Buffer
+
+        const allObjectMatricesBuffer = new Float32Array(objectCount * 16);
         for (let i = 0; i < objects.length; i++) {
             const obj = objects[i];
-            const offset = i * 16; // 4x4 matrix
-            const matrix = Matrix4x4.translationMatrix(
-                obj.position
-            ).mulMatrix(obj.rotation).mulMatrix(Matrix4x4.scaleMatrix(obj.scale));
-            allObjectMatricesBuffer.set(matrix.toFloat32Array(), offset);
+            const matrix = Matrix4x4.translationMatrix(obj.position).mulMatrix(obj.rotation).mulMatrix(Matrix4x4.scaleMatrix(obj.scale));
+            allObjectMatricesBuffer.set(matrix.toFloat32Array(), i * 16);
         }
-    this.device.queue.writeBuffer(this.objectStorageBuffer!, 0, allObjectMatricesBuffer.buffer);
-
+        // write full region that contains active objects
+        this.device.queue.writeBuffer(this.objectStorageBuffer!, 0, allObjectMatricesBuffer.buffer, 0, objectCount * 16 * 4);
     }
 
 

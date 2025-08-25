@@ -5,6 +5,7 @@ import { setupDebugElement } from './misc/setupDebugElement';
 import { setUpCanvas } from './misc/setUpCanvas';
 import { Matrix4x4 } from './misc/Matrix4x4';
 import Controller from './Controller/Controller';
+import Rotator from './Model/Components/Rotator';
 
 console.log('starting app');
 
@@ -28,10 +29,13 @@ if (!document.querySelector('#app')) {
     for (let i = 0; i < 100; i++) {
         for (let j = 0; j < 100; j++) {
             for (let k = 0; k < 100; k++) {
-                model.addSphere(`obj-${i}-${j}-${k}`, 0.1, new Vector4(i*2, j*2, k*2, 0));
+                model.addSphere(`obj-${i}-${j}-${k}`, 0.1, new Vector4(i * 2, j * 2, k * 2, 0));
             }
         }
     }
+
+    // add rotator to the second created sphere (obj-0-0-1)
+    model.addComponentToEntity('obj-0-0-1', new Rotator(1.0, { x: 0, y: 1, z: 0 }));
 
 
 
@@ -49,7 +53,7 @@ if (!document.querySelector('#app')) {
         const times: { [k: string]: number } = {};
 
         const t0 = performance.now();
-        // compute camera chunk and only reload visible set if camera moved across chunk boundary
+        // Model updates are driven by Controller; Model will call onSceneObjectsUpdated when it updates.
         view.registerSceneObjects(model.getObjects(), false).catch(err => console.error('registerSceneObjects failed', err));
         times['registerSceneObjects'] = performance.now() - t0;
 
