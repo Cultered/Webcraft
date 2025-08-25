@@ -42,51 +42,80 @@ export default class Controller {
     });
   }
 
-  start() {
+    start() {
     if (this.intervalId !== null) return; // already running
     let lastModelTime = performance.now();
 
     this.intervalId = window.setInterval(() => {
       if (!this.debugEl) return;
       this.debugEl.innerText = '';
+
       const now = performance.now();
       const delta = (now - lastModelTime) / 1000; // seconds
       lastModelTime = now;
 
+      // performance timers
+      const times: { [k: string]: number } = {};
+
+      const t0 = performance.now();
       this.model.update(delta * 1000);
+      times['model.update'] = performance.now() - t0;
 
-      const cam = this.model.getCamera(this.camId);
+  const cam = this.model.getCamera(this.camId);
 
-      // movement: WASD for planar movement, space/up for up, ctrl/down for down
+      // movement calculations
       const speedBase = this.keys.has('shift') ? -20 : -3; // units per second
       const forward = Vector4.forward().scale(speedBase * delta);
       const right = Vector4.right().scale(speedBase * delta);
       const up = Vector4.up().scale(speedBase * delta);
 
+      let moveOps = 0;
+      const t2 = performance.now();
       if (this.keys.has('w')) {
         cam.position = cam.position.add(this.model.requestInverseRotation(cam).mul(forward));
+        moveOps++;
       }
       if (this.keys.has('s')) {
         cam.position = cam.position.sub(this.model.requestInverseRotation(cam).mul(forward));
+        moveOps++;
       }
       if (this.keys.has('a')) {
         cam.position = cam.position.add(this.model.requestInverseRotation(cam).mul(right));
+        moveOps++;
       }
       if (this.keys.has('d')) {
         cam.position = cam.position.sub(this.model.requestInverseRotation(cam).mul(right));
+        moveOps++;
       }
       if (this.keys.has(' ')) {
         cam.position = cam.position.sub(this.model.requestInverseRotation(cam).mul(up));
+        moveOps++;
       }
       if (this.keys.has('control')) {
         cam.position = cam.position.add(this.model.requestInverseRotation(cam).mul(up));
+        moveOps++;
       }
+      times['movement'] = performance.now() - t2;
+      times['movement_ops'] = moveOps;
 
+      const t3 = performance.now();
       // push camera update into model
       this.model.updateCamera(this.camId, cam.position, cam.rotation);
+      times['updateCamera'] = performance.now() - t3;
 
+      const t4 = performance.now();
       // trigger rendering (render loop handles FPS/debug)
       this.renderFn();
+      times['renderFn'] = performance.now() - t4;
+
+      // print timing breakdown
+      const total = Object.values(times).reduce((s, v) => s + v, 0);
+      let out = `Model loop total: ${total.toFixed(2)} ms`;
+      for (const k of Object.keys(times)) {
+        out += `\n${k}: ${times[k].toFixed(2)} ms`;
+      }
+      out += `\n`; 
+      this.debugEl.innerText += out;
     }, 1000 / 60);
   }
 

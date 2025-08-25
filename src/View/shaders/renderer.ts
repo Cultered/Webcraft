@@ -10,18 +10,22 @@ struct VertexIn {
 
 struct Matrices { m: array<mat4x4<f32>> }
 
-
 @group(0) @binding(0)
-var<storage, read> matrices: Matrices;
+var<storage, read> objectMatrices: Matrices;
+@group(0) @binding(1)
+var<storage, read> cameraMatrix: mat4x4<f32>;
+@group(0) @binding(2)
+var<storage, read> projectionMatrix: mat4x4<f32>;
 
 
 
 @vertex
 fn vertex_main(in: VertexIn,@builtin(vertex_index) v_idx: u32, @builtin(instance_index) i_idx: u32) -> VertexOut {
   var output: VertexOut;
-  let model = matrices.m[i_idx];
+  let model = objectMatrices.m[i_idx];
   let pos4 = vec4f(in.position, 1.0);
-  output.position = model * pos4;
+  // transform: projection * camera * model * position
+  output.position = projectionMatrix * cameraMatrix * model * pos4;
   output.fragPosition = pos4;
   return output;
 }

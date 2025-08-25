@@ -101,14 +101,6 @@ export class Matrix4x4 {
         );
         return proj;
     }
-    static renderMatrix(scale: Vector4, rotate: Matrix4x4, translate: Vector4, camPos: Vector4, camRotate: Matrix4x4, fovY: number, aspect: number, near: number, far: number): Matrix4x4 {
-        /**Example of how to create a render matrix, but you should consider not using this cos like performance */
-        let scaleMatrix = this.scaleMatrix(scale);
-        let translateMatrix = this.translationMatrix(translate.sub(camPos));
-        let projectionMatrix = this.projectionMatrix(fovY, aspect, near, far);
-
-        return projectionMatrix.mulMatrix(camRotate).mulMatrix(translateMatrix).mulMatrix(rotate).mulMatrix(scaleMatrix);// multiply in reverse order
-    }
     toFloat32Array(): Float32Array {
         return new Float32Array([
             this.vec1.x, this.vec1.y, this.vec1.z, this.vec1.w,

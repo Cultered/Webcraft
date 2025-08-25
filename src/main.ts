@@ -25,9 +25,9 @@ if (!document.querySelector('#app')) {
     view.setDebugElement(debugEl);
 
     model.addCamera('main-camera', new Vector4(0, 0, 0, 0), Matrix4x4.rotationalMatrix(new Vector4(0, 3, 0, 0)));
-    for (let i = 0; i < 30; i++) {
-        for (let j = 0; j < 30; j++) {
-            for (let k = 0; k < 30; k++) {
+    for (let i = 0; i < 100; i++) {
+        for (let j = 0; j < 100; j++) {
+            for (let k = 0; k < 100; k++) {
                 model.addSphere(`obj-${i}-${j}-${k}`, 0.1, new Vector4(i, j, k, 0));
             }
         }
@@ -45,10 +45,22 @@ if (!document.querySelector('#app')) {
     controller.start();
     const renderLoop = () => {
 
+        // timing for render steps
+        const times: { [k: string]: number } = {};
+
+        const t0 = performance.now();
         // compute camera chunk and only reload visible set if camera moved across chunk boundary
         view.registerSceneObjects(model.getObjects(), false).catch(err => console.error('registerSceneObjects failed', err));
+        times['registerSceneObjects'] = performance.now() - t0;
+
+        const t1 = performance.now();
         view.registerCamera(model.getCamera("main-camera"));
+        times['registerCamera'] = performance.now() - t1;
+
+        const t2 = performance.now();
         view.render();
+        times['view.render'] = performance.now() - t2;
+
         // FPS calculation
         if (!renderLoop.hasOwnProperty('lastTime')) {
             (renderLoop as any).lastTime = performance.now();
@@ -65,6 +77,14 @@ if (!document.querySelector('#app')) {
         }
         const fps = (renderLoop as any).fps;
         debugEl.innerText += `\nFPS: ${fps}`;
+
+        // append timing breakdown
+        const total = Object.values(times).reduce((s, v) => s + v, 0);
+        let out = `\nRender loop total: ${total.toFixed(2)} ms`;
+        for (const k of Object.keys(times)) {
+            out += `\n${k}: ${times[k].toFixed(2)} ms`;
+        }
+        debugEl.innerText += out + `\n`;
 
     };
 })();

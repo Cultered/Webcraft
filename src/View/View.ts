@@ -13,7 +13,9 @@ class View {
     // per-object buffers are stored in objectBuffers
     private objectBuffers = new Map<string, { vertexBuffer: GPUBuffer; indexBuffer: GPUBuffer; indices: Uint32Array | Uint16Array }>();
     private bindGroup?: GPUBindGroup;
-    private storageBuffer?: GPUBuffer; // view/projection
+    private objectStorageBuffer?: GPUBuffer; // per-object model matrices
+    private cameraBuffer?: GPUBuffer; // single camera matrix
+    private projectionBuffer?: GPUBuffer; // single projection matrix
     public maxObjects = 1000000; // max objects in scene, dynamic
     private fov = 30; // field of view in degrees
     private near = 0.1; // near plane distance
@@ -22,6 +24,10 @@ class View {
 
     // Scene
     private sceneObjects: SceneObject[] = [];
+    // cache last assigned objects reference to avoid reprocessing
+    private lastSceneObjectsRef?: SceneObject[];
+    // cache camera key to detect changes
+    private lastCameraKey?: string;
     private camera: SceneObject = {
         id: 'viewCamera',
         position: new Vector4(0, 0, 0, 1),
@@ -68,16 +74,36 @@ class View {
             const shader = renderer;
             const shaderModule = device.createShaderModule({ code: shader });
 
-            // storage buffer for view/projection matrices each object
-            this.storageBuffer = this.device.createBuffer({
-                size: 64 * this.maxObjects,
+            // create three storage buffers: objects (array of mat4), camera (single mat4), projection (single mat4)
+            this.objectStorageBuffer = this.device.createBuffer({
+                size: 64 * this.maxObjects, // 16 floats (64 bytes) per matrix
+                usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST
+            });
+            this.cameraBuffer = this.device.createBuffer({
+                size: 64,
+                usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST
+            });
+            this.projectionBuffer = this.device.createBuffer({
+                size: 64,
                 usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST
             });
 
+            // write initial projection matrix
+            const initialProj = Matrix4x4.projectionMatrix(this.fov, (canvas.width || window.innerWidth) / (canvas.height || window.innerHeight), this.near, this.far);
+            this.device.queue.writeBuffer(this.projectionBuffer, 0, initialProj.toFloat32Array().buffer);
+
             const bindGroupLayout = device.createBindGroupLayout({
-                entries: [{ binding: 0, visibility: GPUShaderStage.VERTEX, buffer: { type: 'read-only-storage' } }],
+                entries: [
+                    { binding: 0, visibility: GPUShaderStage.VERTEX, buffer: { type: 'read-only-storage' } },
+                    { binding: 1, visibility: GPUShaderStage.VERTEX, buffer: { type: 'read-only-storage' } },
+                    { binding: 2, visibility: GPUShaderStage.VERTEX, buffer: { type: 'read-only-storage' } },
+                ],
             });
-            this.bindGroup = device.createBindGroup({ layout: bindGroupLayout, entries: [{ binding: 0, resource: { buffer: this.storageBuffer! } }] });
+            this.bindGroup = device.createBindGroup({ layout: bindGroupLayout, entries: [
+                { binding: 0, resource: { buffer: this.objectStorageBuffer! } },
+                { binding: 1, resource: { buffer: this.cameraBuffer! } },
+                { binding: 2, resource: { buffer: this.projectionBuffer! } },
+            ] });
 
             const vertexBuffers = [{ attributes: [{ shaderLocation: 0, offset: 0, format: 'float32x3' }], arrayStride: 12, stepMode: 'vertex' }];
 
@@ -100,6 +126,11 @@ class View {
                 this.canvas.height = window.innerHeight;
                 if (this.depthTexture) this.depthTexture.destroy();
                 this.depthTexture = this.device!.createTexture({ size: { width: this.canvas.width, height: this.canvas.height, depthOrArrayLayers: 1 }, sampleCount, format: 'depth24plus', usage: GPUTextureUsage.RENDER_ATTACHMENT });
+                // update projection matrix buffer on resize
+                if (this.projectionBuffer) {
+                    const proj = Matrix4x4.projectionMatrix(this.fov, this.canvas.width / this.canvas.height, this.near, this.far);
+                    this.device.queue.writeBuffer(this.projectionBuffer, 0, proj.toFloat32Array().buffer);
+                }
             };
 
             window.addEventListener('resize', resizeCanvasAndDepthTexture);
@@ -122,16 +153,45 @@ class View {
     // Register scene objects (from Model) so View can upload buffers and draw
     async registerSceneObjects(objects: SceneObject[], updateVertices: boolean) {
         if (!this.device) throw new Error('Device not initialized');
-        this.sceneObjects = objects
-        
-                
+        // If the exact same array reference was provided and no vertex update is requested,
+        // skip heavy work. Model returns a cached array reference per camera chunk, so this
+        // avoids recomputing when camera hasn't moved between chunks.
+        if (objects === this.lastSceneObjectsRef && !updateVertices) {
+            return;
+        }
+
+        this.sceneObjects = objects;
+        this.lastSceneObjectsRef = objects;
+
         if (updateVertices) {
             await this.uploadMeshBuffers();
         }
+
+        // update storage buffer for objects (this can be expensive)
+        // Only do it now if objects changed; if only camera changes later, registerCamera will trigger an update.
         this.updateObjectStorageBuffer(objects);
     }
     registerCamera(camera: SceneObject) {
+        // Build a simple camera key from position and rotation to detect changes.
+        const camKey = `${camera.position.x},${camera.position.y},${camera.position.z}|${JSON.stringify(camera.rotation)}`;
+        if (camKey === this.lastCameraKey) {
+            this.camera = camera;
+            return;
+        }
         this.camera = camera;
+        this.lastCameraKey = camKey;
+
+        // update camera buffer: camera transform = camera.rotation * translation(-camera.position)
+        if (this.device && this.cameraBuffer) {
+            const negPos = new Vector4(-camera.position.x, -camera.position.y, -camera.position.z, 0);
+            const camTransform = camera.rotation.mulMatrix(Matrix4x4.translationMatrix(negPos));
+            this.device.queue.writeBuffer(this.cameraBuffer, 0, camTransform.toFloat32Array().buffer);
+        }
+
+        // If we already have scene objects, recompute object storage buffer because object matrices depend on camera.
+        if (this.sceneObjects && this.sceneObjects.length) {
+            this.updateObjectStorageBuffer(this.sceneObjects);
+        }
     }
 
     uploadMeshes(meshes: { [id: string]: Mesh }): void {
@@ -158,9 +218,9 @@ class View {
         if (objectCount > this.maxObjects) {
             console.warn(`Object count ${objectCount} exceeds maxObjects ${this.maxObjects}, resizing storage buffer`);
             this.maxObjects = objectCount; // update maxObjects
-            this.storageBuffer?.destroy(); // destroy old buffer
-            this.storageBuffer = this.device.createBuffer({
-                size: 64 * this.maxObjects, // 16 bytes per matrix (4x4)
+            this.objectStorageBuffer?.destroy(); // destroy old buffer
+            this.objectStorageBuffer = this.device.createBuffer({
+                size: 64 * this.maxObjects, // 64 bytes per matrix (4x4)
                 usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST
             });
         }
@@ -169,14 +229,12 @@ class View {
         for (let i = 0; i < objects.length; i++) {
             const obj = objects[i];
             const offset = i * 16; // 4x4 matrix
-            const matrix = Matrix4x4.renderMatrix(
-                obj.scale, obj.rotation, obj.position,
-                this.camera.position, this.camera.rotation,
-                this.fov, (this.canvas!.width) / (this.canvas!.height), this.near, this.far
-            );
+            const matrix = Matrix4x4.translationMatrix(
+                obj.position
+            ).mulMatrix(obj.rotation).mulMatrix(Matrix4x4.scaleMatrix(obj.scale));
             allObjectMatricesBuffer.set(matrix.toFloat32Array(), offset);
         }
-        this.device.queue.writeBuffer(this.storageBuffer!, 0, allObjectMatricesBuffer);
+    this.device.queue.writeBuffer(this.objectStorageBuffer!, 0, allObjectMatricesBuffer.buffer);
 
     }
 
