@@ -8,7 +8,6 @@ export type SceneObject = {
     scale: Vector4;
     props: {
         mesh?: string
-        LOD?: number; //TODO
         inverseRotation?: Matrix4x4
         updateInverseRotation?: boolean //to compute as less inverse matrices as possible
     };
@@ -22,16 +21,17 @@ export type Mesh = {
 
 export default class Model {
     private objects: SceneObject[] = [];
+    private objectsVersion = 0;
     private cameras: SceneObject[] = [];
     private meshes: { [id: string]: Mesh } = {};
 
-    getMesh(id:string){
+    getMesh(id: string) {
         return this.meshes[id]
     }
-    getMeshes(){
+    getMeshes() {
         return this.meshes
     }
-    
+
     constructor() {
         this.meshes["builtin-sphere"] = { id: "builtin-sphere", ...this.generateSphereMesh(20, 20, 1) }
         this.meshes["builtin-cube"] = { id: "builtin-cube", ...this.generateCubeMesh(1) }
@@ -102,29 +102,33 @@ export default class Model {
         };
     }
 
-    addSphere(id: string, radius?:number, position?: Vector4, rotation?: Matrix4x4) {
+    addSphere(id: string, radius?: number, position?: Vector4, rotation?: Matrix4x4) {
         this.objects.push({
             id,
             position: position ?? new Vector4(0, 0, 0, 1),
             rotation: rotation ?? Matrix4x4.identity(),
-            scale: radius?new Vector4(radius, radius, radius, 1):new Vector4(1,1,1,1), // default scale
+            scale: radius ? new Vector4(radius, radius, radius, 1) : new Vector4(1, 1, 1, 1), // default scale
             props: { mesh: "builtin-sphere" }
         });
+        this.objectsVersion++;
     }
 
     addCube(id: string, size = 1, position?: Vector4, rotation?: Matrix4x4) {
         this.objects.push({
             id,
-            position: position ?? new Vector4(0, 0, 0, 1),
+            position: position ?? new Vector4(0, 0, 0, 0),
             rotation: rotation ?? Matrix4x4.identity(),
             scale: new Vector4(size, size, size, 1), // default scale
             props: { mesh: "builtin-cube" }
         });
+        this.objectsVersion++;
     }
 
     getObjects() {
         return this.objects;
     }
+
+    getObjectsVersion(): number { return this.objectsVersion }
 
     addCamera(id: string, position?: Vector4, rotation?: Matrix4x4) {
         const camera: SceneObject = {
@@ -168,9 +172,10 @@ export default class Model {
     }
 
     update(deltaMs: number) {
+        const seconds = deltaMs / 1000;
+        const rm = Matrix4x4.rotationalMatrix(new Vector4(0.1 * seconds, 0.1 * seconds, 0, 0));
         for (const obj of this.objects) {
-            const rm = Matrix4x4.rotationalMatrix(new Vector4(0.01, 0.01, 0, 0))
-            obj.rotation = obj.rotation.mulMatrix(rm)
+            obj.rotation = obj.rotation.mulMatrix(rm);
         }
     }
 }

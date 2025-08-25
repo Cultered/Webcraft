@@ -4,6 +4,7 @@ import { Vector4 } from './misc/Vector4';
 import { setupDebugElement } from './misc/setupDebugElement';
 import { setUpCanvas } from './misc/setUpCanvas';
 import { Matrix4x4 } from './misc/Matrix4x4';
+import Controller from './Controller/Controller';
 
 console.log('starting app');
 
@@ -23,11 +24,11 @@ if (!document.querySelector('#app')) {
     const debugEl = setupDebugElement()
     view.setDebugElement(debugEl);
 
-    model.addCamera('main-camera', new Vector4(1, 1, 1, 1), Matrix4x4.rotationalMatrix(new Vector4(0,4,0,0)));
-    for (let i = 0; i < 20; i++) {
-        for (let j = 0; j < 20; j++) {
-            for (let k = 0; k < 20; k++) {
-                model.addCube(`cube-${i}-${j}-${k}`, 0.2, new Vector4(i * i/10, j*3, k*3, 2));
+    model.addCamera('main-camera', new Vector4(0, 0, 0, 0), Matrix4x4.rotationalMatrix(new Vector4(0, 3, 0, 0)));
+    for (let i = 0; i < 30; i++) {
+        for (let j = 0; j < 30; j++) {
+            for (let k = 0; k < 30; k++) {
+                model.addSphere(`obj-${i}-${j}-${k}`, 0.1, new Vector4(i, j, k, 0));
             }
         }
     }
@@ -35,78 +36,16 @@ if (!document.querySelector('#app')) {
 
 
     await view.registerSceneObjects(model.getObjects(), true);
+    // create chunk index from all scene objects; choose chunk size (same as View.currentChunkSize default)
 
-    // Camera control state
-    const cam = model.getCamera('main-camera');
-
-    const keys = new Set<string>();
-    window.addEventListener('keydown', (e) => keys.add(e.key.toLowerCase()));
-    window.addEventListener('keyup', (e) => keys.delete(e.key.toLowerCase()));
-
-    // pointer lock + mouse look
+    // Camera controller
     const canvasEl = document.querySelector('#webgpu-canvas') as HTMLCanvasElement;
-    canvasEl.addEventListener('click', () => {
-        canvasEl.requestPointerLock?.();
-    });
-
-    const mouseSensitivity = 0.0025; // radians per pixel
-    document.addEventListener('pointerlockchange', () => {
-        if (document.pointerLockElement === canvasEl) {
-            document.addEventListener('mousemove', onMouseMove);
-        } else {
-            document.removeEventListener('mousemove', onMouseMove);
-        }
-    });
-
-    function onMouseMove(e: MouseEvent) {
-        const dy = e.movementY * mouseSensitivity;//x axis rotation
-        const dx = e.movementX * mouseSensitivity;//y axis rotation
-        const ry = Matrix4x4.rotationalMatrix(new Vector4(0, -dx, 0, 0))
-        const rx = Matrix4x4.rotationalMatrix(new Vector4(-dy, 0, 0, 0))
-        cam.rotation = (rx.mulMatrix(ry.mulMatrix(cam.rotation)))
-        cam.props.updateInverseRotation = true
-        model.updateCamera('main-camera', cam.position, cam.rotation);
-    }
-
-    let lastModelTime = performance.now();
-    const modelLoop = () => {
-        const now = performance.now();
-        const delta = (now - lastModelTime) / 1000; // seconds
-        lastModelTime = now;
-
-        model.update(delta * 1000);
-
-        // movement: WASD for planar movement, space/up for up, ctrl/down for down
-        const speedBase = keys.has('shift') ? -20 : -3; // units per second
-        const forward = Vector4.forward().scale(speedBase * delta)
-        const right = Vector4.right().scale(speedBase * delta)
-        const up = Vector4.up().scale(speedBase * delta)
-
-        if (keys.has('w')) {
-            cam.position = cam.position.add(model.requestInverseRotation(cam).mul(forward))
-        }
-        if (keys.has('s')) {
-            cam.position = cam.position.sub(model.requestInverseRotation(cam).mul(forward))
-        }
-        if (keys.has('a')) {
-            cam.position = cam.position.add(model.requestInverseRotation(cam).mul(right))
-        }
-        if (keys.has('d')) {
-            cam.position = cam.position.sub(model.requestInverseRotation(cam).mul(right))
-        }
-        if (keys.has(' ')) {
-            cam.position = cam.position.sub(model.requestInverseRotation(cam).mul(up));
-        }
-        if (keys.has('control')) {
-            cam.position = cam.position.add(model.requestInverseRotation(cam).mul(up));
-        }
-        // push camera update into model
-        model.updateCamera('main-camera', cam.position, cam.rotation);
-        renderLoop()
-    };
-    setInterval(modelLoop, 1000 / 60);
-
+    const controller = new Controller(model, () => renderLoop());
+    controller.init(canvasEl, debugEl);
+    controller.start();
     const renderLoop = () => {
+
+        // compute camera chunk and only reload visible set if camera moved across chunk boundary
         view.registerSceneObjects(model.getObjects(), false).catch(err => console.error('registerSceneObjects failed', err));
         view.registerCamera(model.getCamera("main-camera"));
         view.render();
@@ -126,5 +65,6 @@ if (!document.querySelector('#app')) {
         }
         const fps = (renderLoop as any).fps;
         debugEl.innerText += `\nFPS: ${fps}`;
+
     };
 })();

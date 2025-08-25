@@ -17,9 +17,8 @@ class View {
     public maxObjects = 1000000; // max objects in scene, dynamic
     private fov = 30; // field of view in degrees
     private near = 0.1; // near plane distance
-    private far = 1000; // far plane distance
+    private far = 1000; // far plane distance, also used in cpu culling
     private meshes: { [id: string]: Mesh } = {};
-
 
     // Scene
     private sceneObjects: SceneObject[] = [];
@@ -93,7 +92,7 @@ class View {
 
             this.renderPipeline = device.createRenderPipeline(pipelineDescriptor);
             console.log('render pipeline created');
-            if (this.debugEl) this.debugEl.innerText = 'WebGPU: ready';
+            if (this.debugEl) this.debugEl.innerText += 'WebGPU: ready';
 
             const resizeCanvasAndDepthTexture = () => {
                 if (!this.canvas || !this.device) return;
@@ -107,7 +106,7 @@ class View {
             resizeCanvasAndDepthTexture();
         } catch (error) {
             console.error('Failed to initialize WebGPU:', error);
-            if (this.debugEl) this.debugEl.innerText = 'WebGPU init error: ' + (error as Error).message;
+            if (this.debugEl) this.debugEl.innerText += 'WebGPU init error: ' + (error as Error).message;
         }
 
         return [adapter, device, canvas, context, format] as const;
@@ -123,7 +122,9 @@ class View {
     // Register scene objects (from Model) so View can upload buffers and draw
     async registerSceneObjects(objects: SceneObject[], updateVertices: boolean) {
         if (!this.device) throw new Error('Device not initialized');
-        this.sceneObjects = objects;
+        this.sceneObjects = objects
+        
+                
         if (updateVertices) {
             await this.uploadMeshBuffers();
         }
@@ -133,10 +134,9 @@ class View {
         this.camera = camera;
     }
 
-    uploadMeshes(meshes:{[id:string]:Mesh}):void{
-        this.meshes=meshes
+    uploadMeshes(meshes: { [id: string]: Mesh }): void {
+        this.meshes = meshes
     }
-
     private async uploadMeshBuffers() {
         if (!this.device) return;
         for (const obj of this.sceneObjects) {
@@ -180,10 +180,11 @@ class View {
 
     }
 
+
     render(): void {
         if (!this.device || !this.context || !this.renderPipeline || !this.depthTexture || !this.bindGroup) {
             console.warn('Render skipped: device/context/pipeline not ready');
-            if (this.debugEl) this.debugEl.innerText = 'Render skipped: device/context/pipeline not ready';
+            if (this.debugEl) this.debugEl.innerText += 'Render skipped: device/context/pipeline not ready';
             return;
         }
 
@@ -210,8 +211,10 @@ class View {
             // draw each registered object
             let currentMeshId: string = "empty";
             let instanceIndex = 0;
+            let objIndex = 0;
             let buf;
             for (const obj of this.sceneObjects) {
+                objIndex++;
                 if (obj.props.mesh !== currentMeshId) {
                     buf = this.objectBuffers.get(obj.props.mesh!);
                     instanceIndex++;
@@ -234,12 +237,13 @@ class View {
 
             // debug
             if (this.debugEl) {
-                this.debugEl.innerText = `WebGPU ready\nObjects: ${this.sceneObjects.length}\nBuffers: ${this.objectBuffers.size}`;
+
+                this.debugEl.innerText += `WebGPU ready\nObjects: ${objIndex}\nBuffers: ${this.objectBuffers.size}`;
                 this.debugEl.innerText += `\nCamerar: x${this.camera.position.x} y${this.camera.position.y} z${this.camera.position.z}`;
             }
         } catch (e) {
             console.error('Render error:', e);
-            if (this.debugEl) this.debugEl.innerText = 'Render error: ' + (e as Error).message;
+            if (this.debugEl) this.debugEl.innerText += 'Render error: ' + (e as Error).message;
         }
     }
 }

@@ -36,5 +36,7 @@ export class Vector4 {
     toFloat32Array():Float32Array {
         return new Float32Array([this.x, this.y, this.z, this.w]);
     }
-    
+    len1():number{
+        return Math.abs(this.x)+Math.abs(this.y)+Math.abs(this.z)
+    }
 }

@@ -11,12 +11,12 @@ export class Matrix4x4 {
         this.vec3 = vec3; // vec4<f32>
         this.vec4 = vec4; // vec4<f32>
     }
-    static identity(): Matrix4x4{
+    static identity(): Matrix4x4 {
         return new Matrix4x4(
-            new Vector4(1,0,0,0),
-            new Vector4(0,1,0,0),
-            new Vector4(0,0,1,0),
-            new Vector4(0,0,0,1),
+            new Vector4(1, 0, 0, 0),
+            new Vector4(0, 1, 0, 0),
+            new Vector4(0, 0, 1, 0),
+            new Vector4(0, 0, 0, 1),
         )
     }
     mul(other: Vector4): Vector4 {
@@ -37,10 +37,7 @@ export class Matrix4x4 {
     }
     static translationMatrix(vec: Vector4): Matrix4x4 {
         /**Create a translate matrix, w component should be 1, otherwise it will be converted to 1 implicitly */
-        if (vec.w !== 1) {
-            console.warn("Matrix4x4.transposeMatrix: w component of vector should be 1, got", vec.w);
-            vec = new Vector4(vec.x, vec.y, vec.z, 1); // normalize w to 1
-        }
+        vec = new Vector4(vec.x, vec.y, vec.z, 1); // normalize w to 1
         return new Matrix4x4(
             new Vector4(1, 0, 0, 0),
             new Vector4(0, 1, 0, 0),
@@ -82,7 +79,7 @@ export class Matrix4x4 {
         return rotZ.mulMatrix(rotY).mulMatrix(rotX);
     }
     static scaleMatrix(vec: Vector4): Matrix4x4 {
-        if(vec.w != 1){
+        if (vec.w != 1) {
             console.warn("You are scaling with w, probably not something you want, ", vec)
         }
         return new Matrix4x4(
@@ -104,7 +101,7 @@ export class Matrix4x4 {
         );
         return proj;
     }
-    static renderMatrix(scale:Vector4,rotate:Matrix4x4,translate:Vector4, camPos:Vector4,camRotate:Matrix4x4,fovY: number, aspect: number, near: number, far: number): Matrix4x4 {
+    static renderMatrix(scale: Vector4, rotate: Matrix4x4, translate: Vector4, camPos: Vector4, camRotate: Matrix4x4, fovY: number, aspect: number, near: number, far: number): Matrix4x4 {
         /**Example of how to create a render matrix, but you should consider not using this cos like performance */
         let scaleMatrix = this.scaleMatrix(scale);
         let translateMatrix = this.translationMatrix(translate.sub(camPos));
@@ -126,117 +123,117 @@ export class Matrix4x4 {
         const m = this.toFloat32Array();
         const inv = new Float32Array(16);
 
-        inv[0] = m[5]  * m[10] * m[15] -
-                 m[5]  * m[11] * m[14] -
-                 m[9]  * m[6]  * m[15] +
-                 m[9]  * m[7]  * m[14] +
-                 m[13] * m[6]  * m[11] -
-                 m[13] * m[7]  * m[10];
+        inv[0] = m[5] * m[10] * m[15] -
+            m[5] * m[11] * m[14] -
+            m[9] * m[6] * m[15] +
+            m[9] * m[7] * m[14] +
+            m[13] * m[6] * m[11] -
+            m[13] * m[7] * m[10];
 
-        inv[4] = -m[4]  * m[10] * m[15] +
-                  m[4]  * m[11] * m[14] +
-                  m[8]  * m[6]  * m[15] -
-                  m[8]  * m[7]  * m[14] -
-                  m[12] * m[6]  * m[11] +
-                  m[12] * m[7]  * m[10];
+        inv[4] = -m[4] * m[10] * m[15] +
+            m[4] * m[11] * m[14] +
+            m[8] * m[6] * m[15] -
+            m[8] * m[7] * m[14] -
+            m[12] * m[6] * m[11] +
+            m[12] * m[7] * m[10];
 
-        inv[8] = m[4]  * m[9] * m[15] -
-                 m[4]  * m[11] * m[13] -
-                 m[8]  * m[5] * m[15] +
-                 m[8]  * m[7] * m[13] +
-                 m[12] * m[5] * m[11] -
-                 m[12] * m[7] * m[9];
+        inv[8] = m[4] * m[9] * m[15] -
+            m[4] * m[11] * m[13] -
+            m[8] * m[5] * m[15] +
+            m[8] * m[7] * m[13] +
+            m[12] * m[5] * m[11] -
+            m[12] * m[7] * m[9];
 
-        inv[12] = -m[4]  * m[9] * m[14] +
-                   m[4]  * m[10] * m[13] +
-                   m[8]  * m[5] * m[14] -
-                   m[8]  * m[6] * m[13] -
-                   m[12] * m[5] * m[10] +
-                   m[12] * m[6] * m[9];
+        inv[12] = -m[4] * m[9] * m[14] +
+            m[4] * m[10] * m[13] +
+            m[8] * m[5] * m[14] -
+            m[8] * m[6] * m[13] -
+            m[12] * m[5] * m[10] +
+            m[12] * m[6] * m[9];
 
-        inv[1] = -m[1]  * m[10] * m[15] +
-                  m[1]  * m[11] * m[14] +
-                  m[9]  * m[2] * m[15] -
-                  m[9]  * m[3] * m[14] -
-                  m[13] * m[2] * m[11] +
-                  m[13] * m[3] * m[10];
+        inv[1] = -m[1] * m[10] * m[15] +
+            m[1] * m[11] * m[14] +
+            m[9] * m[2] * m[15] -
+            m[9] * m[3] * m[14] -
+            m[13] * m[2] * m[11] +
+            m[13] * m[3] * m[10];
 
-        inv[5] = m[0]  * m[10] * m[15] -
-                 m[0]  * m[11] * m[14] -
-                 m[8]  * m[2] * m[15] +
-                 m[8]  * m[3] * m[14] +
-                 m[12] * m[2] * m[11] -
-                 m[12] * m[3] * m[10];
+        inv[5] = m[0] * m[10] * m[15] -
+            m[0] * m[11] * m[14] -
+            m[8] * m[2] * m[15] +
+            m[8] * m[3] * m[14] +
+            m[12] * m[2] * m[11] -
+            m[12] * m[3] * m[10];
 
-        inv[9] = -m[0]  * m[9] * m[15] +
-                  m[0]  * m[11] * m[13] +
-                  m[8]  * m[1] * m[15] -
-                  m[8]  * m[3] * m[13] -
-                  m[12] * m[1] * m[11] +
-                  m[12] * m[3] * m[9];
+        inv[9] = -m[0] * m[9] * m[15] +
+            m[0] * m[11] * m[13] +
+            m[8] * m[1] * m[15] -
+            m[8] * m[3] * m[13] -
+            m[12] * m[1] * m[11] +
+            m[12] * m[3] * m[9];
 
-        inv[13] = m[0]  * m[9] * m[14] -
-                  m[0]  * m[10] * m[13] -
-                  m[8]  * m[1] * m[14] +
-                  m[8]  * m[2] * m[13] +
-                  m[12] * m[1] * m[10] -
-                  m[12] * m[2] * m[9];
+        inv[13] = m[0] * m[9] * m[14] -
+            m[0] * m[10] * m[13] -
+            m[8] * m[1] * m[14] +
+            m[8] * m[2] * m[13] +
+            m[12] * m[1] * m[10] -
+            m[12] * m[2] * m[9];
 
-        inv[2] = m[1]  * m[6] * m[15] -
-                 m[1]  * m[7] * m[14] -
-                 m[5]  * m[2] * m[15] +
-                 m[5]  * m[3] * m[14] +
-                 m[13] * m[2] * m[7] -
-                 m[13] * m[3] * m[6];
+        inv[2] = m[1] * m[6] * m[15] -
+            m[1] * m[7] * m[14] -
+            m[5] * m[2] * m[15] +
+            m[5] * m[3] * m[14] +
+            m[13] * m[2] * m[7] -
+            m[13] * m[3] * m[6];
 
-        inv[6] = -m[0]  * m[6] * m[15] +
-                  m[0]  * m[7] * m[14] +
-                  m[4]  * m[2] * m[15] -
-                  m[4]  * m[3] * m[14] -
-                  m[12] * m[2] * m[7] +
-                  m[12] * m[3] * m[6];
+        inv[6] = -m[0] * m[6] * m[15] +
+            m[0] * m[7] * m[14] +
+            m[4] * m[2] * m[15] -
+            m[4] * m[3] * m[14] -
+            m[12] * m[2] * m[7] +
+            m[12] * m[3] * m[6];
 
-        inv[10] = m[0]  * m[5] * m[15] -
-                  m[0]  * m[7] * m[13] -
-                  m[4]  * m[1] * m[15] +
-                  m[4]  * m[3] * m[13] +
-                  m[12] * m[1] * m[7] -
-                  m[12] * m[3] * m[5];
+        inv[10] = m[0] * m[5] * m[15] -
+            m[0] * m[7] * m[13] -
+            m[4] * m[1] * m[15] +
+            m[4] * m[3] * m[13] +
+            m[12] * m[1] * m[7] -
+            m[12] * m[3] * m[5];
 
-        inv[14] = -m[0]  * m[5] * m[14] +
-                   m[0]  * m[6] * m[13] +
-                   m[4]  * m[1] * m[14] -
-                   m[4]  * m[2] * m[13] -
-                   m[12] * m[1] * m[6] +
-                   m[12] * m[2] * m[5];
+        inv[14] = -m[0] * m[5] * m[14] +
+            m[0] * m[6] * m[13] +
+            m[4] * m[1] * m[14] -
+            m[4] * m[2] * m[13] -
+            m[12] * m[1] * m[6] +
+            m[12] * m[2] * m[5];
 
         inv[3] = -m[1] * m[6] * m[11] +
-                  m[1] * m[7] * m[10] +
-                  m[5] * m[2] * m[11] -
-                  m[5] * m[3] * m[10] -
-                  m[9] * m[2] * m[7] +
-                  m[9] * m[3] * m[6];
+            m[1] * m[7] * m[10] +
+            m[5] * m[2] * m[11] -
+            m[5] * m[3] * m[10] -
+            m[9] * m[2] * m[7] +
+            m[9] * m[3] * m[6];
 
         inv[7] = m[0] * m[6] * m[11] -
-                 m[0] * m[7] * m[10] -
-                 m[4] * m[2] * m[11] +
-                 m[4] * m[3] * m[10] +
-                 m[8] * m[2] * m[7] -
-                 m[8] * m[3] * m[6];
+            m[0] * m[7] * m[10] -
+            m[4] * m[2] * m[11] +
+            m[4] * m[3] * m[10] +
+            m[8] * m[2] * m[7] -
+            m[8] * m[3] * m[6];
 
         inv[11] = -m[0] * m[5] * m[11] +
-                   m[0] * m[7] * m[9] +
-                   m[4] * m[1] * m[11] -
-                   m[4] * m[3] * m[9] -
-                   m[8] * m[1] * m[7] +
-                   m[8] * m[3] * m[5];
+            m[0] * m[7] * m[9] +
+            m[4] * m[1] * m[11] -
+            m[4] * m[3] * m[9] -
+            m[8] * m[1] * m[7] +
+            m[8] * m[3] * m[5];
 
         inv[15] = m[0] * m[5] * m[10] -
-                  m[0] * m[6] * m[9] -
-                  m[4] * m[1] * m[10] +
-                  m[4] * m[2] * m[9] +
-                  m[8] * m[1] * m[6] -
-                  m[8] * m[2] * m[5];
+            m[0] * m[6] * m[9] -
+            m[4] * m[1] * m[10] +
+            m[4] * m[2] * m[9] +
+            m[8] * m[1] * m[6] -
+            m[8] * m[2] * m[5];
 
         let det = m[0] * inv[0] + m[1] * inv[4] + m[2] * inv[8] + m[3] * inv[12];
 
