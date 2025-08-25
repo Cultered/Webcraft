@@ -17,8 +17,8 @@ export type SceneObject = {
 
 // Chunking constants (tuneable)
 export const CHUNK_SIZE = 10; // world units per chunk
-export const RENDER_DISTANCE = 3; // in chunks (Manhattan/max chunk distance)
-export const CPU_FRUSTUM_CULLING = false // move main resourse load from gpu to cpu, not implemented
+export let RENDER_DISTANCE = 8; // in chunks (Manhattan/max chunk distance)
+export const CPU_SOFT_FRUSTUM_CULLING = false // removes 50% of unrendered objects, needs fixing camera rotation jitter
 
 export type Mesh = {
     id: string;
@@ -152,19 +152,25 @@ export default class Model {
         const camChunk = this.chunkCoordsFromPosition(camPos);
         const camChunkKey = `${camChunk.x},${camChunk.y},${camChunk.z}`;
 
-        // if camera hasn't moved between chunks, return cached result
-        if (this.lastCameraChunkKey === camChunkKey && this.cachedVisibleObjects.length) {
+        // compute camera forward for optional soft frustum culling and to detect rotation changes
+        const cameraForward: Vector4 = camera.rotation.inverse().mul(Vector4.forward().neg());
+
+        // if nothing changed, return cached result
+        if (this.lastCameraChunkKey === camChunkKey ) {
+
             return this.cachedVisibleObjects;
         }
 
         const collected = new Set<SceneObject>();
 
+
         // iterate neighboring chunks within render distance
         for (let dx = -RENDER_DISTANCE; dx <= RENDER_DISTANCE; dx++) {
             for (let dy = -RENDER_DISTANCE; dy <= RENDER_DISTANCE; dy++) {
                 for (let dz = -RENDER_DISTANCE; dz <= RENDER_DISTANCE; dz++) {
-                    if (CPU_FRUSTUM_CULLING) {
-                        console.warn("CPU_FRUSTUM_CULLING is not implemented yet")
+                    if (dx * dx + dy * dy + dz * dz > RENDER_DISTANCE * RENDER_DISTANCE) continue; //spherical distance check
+                    if (CPU_SOFT_FRUSTUM_CULLING) {
+                        if (cameraForward.mul(new Vector4(dx, dy, dz, 0)) < 0) continue; // dot product negative = behind camera
                     }
                     const key = `${camChunk.x + dx},${camChunk.y + dy},${camChunk.z + dz}`;
                     const objs = this.chunks.get(key);

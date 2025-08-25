@@ -30,13 +30,13 @@ export class Vector4 {
     scale(q:number):Vector4{
         return new Vector4(this.x*q,this.y*q,this.z*q,this.w*q)
     }
-    mul(other:Vector4):Vector4{
-        return new Vector4(this.x*other.x,this.y*other.y,this.z*other.z,this.w*other.w)
+    mul(other:Vector4):number{
+        return this.x*other.x+this.y*other.y+this.z*other.z+this.w*other.w
     }
     toFloat32Array():Float32Array {
         return new Float32Array([this.x, this.y, this.z, this.w]);
     }
     len1():number{
-        return Math.abs(this.x)+Math.abs(this.y)+Math.abs(this.z)
+        return this.mul(this)
     }
 }
