@@ -19,7 +19,7 @@ export type SceneObject = {
 // Chunking constants (tuneable)
 export const CHUNK_SIZE = 10; // world units per chunk
 export let RENDER_DISTANCE = 8; // in chunks (Manhattan/max chunk distance)
-export const CPU_SOFT_FRUSTUM_CULLING = false // removes 50% of unrendered objects, needs fixing camera rotation jitter
+export const CPU_SOFT_FRUSTUM_CULLING = true // removes 50% of unrendered objects, dont use with high render distance
 
 export type Mesh = {
     id: string;
@@ -147,7 +147,7 @@ export default class Model {
 
         const cameraForward: Vector4 = camera.rotation.inverse().mul(Vector4.forward().neg());
 
-        if (this.lastCameraChunkKey === camChunkKey) {
+        if (this.lastCameraChunkKey === camChunkKey && !CPU_SOFT_FRUSTUM_CULLING) {
             // map cached ids back to SceneObject view
             return this.cachedVisibleObjects.map(id => this.entityMap.get(id)).filter(Boolean).map(e => this.entityToSceneObject(e!));
         }
