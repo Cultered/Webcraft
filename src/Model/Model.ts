@@ -158,7 +158,7 @@ export default class Model {
                 for (let dz = -RENDER_DISTANCE; dz <= RENDER_DISTANCE; dz++) {
                     if (dx * dx + dy * dy + dz * dz > RENDER_DISTANCE * RENDER_DISTANCE) continue;
                     if (CPU_SOFT_FRUSTUM_CULLING) {
-                        if (cameraForward.mul(new Vector4(dx, dy, dz, 0)) < 0) continue;
+                        if (cameraForward.mul(new Vector4(dx, dy, dz, 0)) < -1) continue;
                     }
                     const key = `${camChunk.x + dx},${camChunk.y + dy},${camChunk.z + dz}`;
                     const ids = this.chunks.get(key);
