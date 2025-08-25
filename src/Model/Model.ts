@@ -17,7 +17,8 @@ export type SceneObject = {
 
 // Chunking constants (tuneable)
 export const CHUNK_SIZE = 10; // world units per chunk
-export const RENDER_DISTANCE = 5; // in chunks (Manhattan/max chunk distance)
+export const RENDER_DISTANCE = 3; // in chunks (Manhattan/max chunk distance)
+export const CPU_FRUSTUM_CULLING = false // move main resourse load from gpu to cpu, not implemented
 
 export type Mesh = {
     id: string;
@@ -123,8 +124,8 @@ export default class Model {
             scale: radius ? new Vector4(radius, radius, radius, 1) : new Vector4(1, 1, 1, 1), // default scale
             props: { mesh: "builtin-sphere" }
         };
-    this.objects.push(obj as SceneObject);
-    this.assignToChunk(obj as SceneObject);
+        this.objects.push(obj as SceneObject);
+        this.assignToChunk(obj as SceneObject);
     }
 
     addCube(id: string, size = 1, position?: Vector4, rotation?: Matrix4x4) {
@@ -137,8 +138,8 @@ export default class Model {
             scale: new Vector4(size, size, size, 1), // default scale
             props: { mesh: "builtin-cube" }
         };
-    this.objects.push(obj as SceneObject);
-    this.assignToChunk(obj as SceneObject);
+        this.objects.push(obj as SceneObject);
+        this.assignToChunk(obj as SceneObject);
     }
 
     // Returns objects that are within RENDER_DISTANCE (in chunks) from the primary camera ("main-camera").
@@ -162,6 +163,9 @@ export default class Model {
         for (let dx = -RENDER_DISTANCE; dx <= RENDER_DISTANCE; dx++) {
             for (let dy = -RENDER_DISTANCE; dy <= RENDER_DISTANCE; dy++) {
                 for (let dz = -RENDER_DISTANCE; dz <= RENDER_DISTANCE; dz++) {
+                    if (CPU_FRUSTUM_CULLING) {
+                        console.warn("CPU_FRUSTUM_CULLING is not implemented yet")
+                    }
                     const key = `${camChunk.x + dx},${camChunk.y + dy},${camChunk.z + dz}`;
                     const objs = this.chunks.get(key);
                     if (objs) objs.forEach(o => collected.add(o));
@@ -181,7 +185,7 @@ export default class Model {
         const oldChunk = obj.props.chunkKey;
         obj._position = newPos;
         // update chunk assignment
-    this.updateChunkAssignment(obj as SceneObject, oldChunk);
+        this.updateChunkAssignment(obj as SceneObject, oldChunk);
         return true;
     }
 

@@ -28,7 +28,7 @@ if (!document.querySelector('#app')) {
     for (let i = 0; i < 100; i++) {
         for (let j = 0; j < 100; j++) {
             for (let k = 0; k < 100; k++) {
-                model.addSphere(`obj-${i}-${j}-${k}`, 0.1, new Vector4(i, j, k, 0));
+                model.addSphere(`obj-${i}-${j}-${k}`, 0.1, new Vector4(i*2, j*2, k*2, 0));
             }
         }
     }
