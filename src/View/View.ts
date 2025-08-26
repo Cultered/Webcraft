@@ -47,101 +47,124 @@ class View {
      * The caller is responsible for creating/appending the canvas to the DOM.
      */
     async initWebGPU(canvas: HTMLCanvasElement) {
-        if (!navigator.gpu) {
-            console.error('WebGPU API unavailable');
-            return;
-        }
-        const adapter = await navigator.gpu.requestAdapter({ powerPreference: 'high-performance' });
-        if (!adapter) throw new Error('No adapter found');
-        const device = await adapter.requestDevice({ requiredLimits: { maxBufferSize: 600000000 } });
-        const context = canvas.getContext('webgpu')!;
-        const format = navigator.gpu.getPreferredCanvasFormat();
-        context.configure({ device, format, alphaMode: 'premultiplied' });
-
-        // store
-        this.device = device;
-        this.canvas = canvas;
-        this.context = context;
-
         try {
-            const sampleCount = 1;
-            this.depthTexture = device.createTexture({
-                size: { width: canvas.width || window.innerWidth, height: canvas.height || window.innerHeight, depthOrArrayLayers: 1 },
-                sampleCount,
-                format: 'depth24plus',
-                usage: GPUTextureUsage.RENDER_ATTACHMENT,
-            });
+            const adapter = await navigator.gpu.requestAdapter({ powerPreference: 'high-performance' });
+            if (!adapter) throw new Error('No adapter found');
+            const device = await adapter.requestDevice({ requiredLimits: { maxBufferSize: 600000000 } });
+            const context = canvas.getContext('webgpu')!;
+            const format = navigator.gpu.getPreferredCanvasFormat();
+            context.configure({ device, format, alphaMode: 'premultiplied' });
 
-            const shader = renderer;
-            const shaderModule = device.createShaderModule({ code: shader });
+            // store
+            this.device = device;
+            this.canvas = canvas;
+            this.context = context;
 
-            // create three storage buffers: objects (array of mat4), camera (single mat4), projection (single mat4)
-            this.objectStorageBuffer = this.device.createBuffer({
-                size: 64 * this.maxObjects, // 16 floats (64 bytes) per matrix
-                usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST
-            });
-            this.cameraBuffer = this.device.createBuffer({
-                size: 64,
-                usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST
-            });
-            this.projectionBuffer = this.device.createBuffer({
-                size: 64,
-                usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST
-            });
+            try {
+                const sampleCount = 1;
+                this.depthTexture = device.createTexture({
+                    size: { width: canvas.width || window.innerWidth, height: canvas.height || window.innerHeight, depthOrArrayLayers: 1 },
+                    sampleCount,
+                    format: 'depth24plus',
+                    usage: GPUTextureUsage.RENDER_ATTACHMENT,
+                });
 
-            // write initial projection matrix
-            const initialProj = Matrix4x4.projectionMatrix(this.fov, (canvas.width || window.innerWidth) / (canvas.height || window.innerHeight), this.near, this.far);
-            this.device.queue.writeBuffer(this.projectionBuffer, 0, initialProj.toFloat32Array().buffer);
+                const shader = renderer;
+                const shaderModule = device.createShaderModule({ code: shader });
 
-            const bindGroupLayout = device.createBindGroupLayout({
-                entries: [
-                    { binding: 0, visibility: GPUShaderStage.VERTEX, buffer: { type: 'read-only-storage' } },
-                    { binding: 1, visibility: GPUShaderStage.VERTEX, buffer: { type: 'read-only-storage' } },
-                    { binding: 2, visibility: GPUShaderStage.VERTEX, buffer: { type: 'read-only-storage' } },
-                ],
-            });
-            this.bindGroup = device.createBindGroup({ layout: bindGroupLayout, entries: [
-                { binding: 0, resource: { buffer: this.objectStorageBuffer! } },
-                { binding: 1, resource: { buffer: this.cameraBuffer! } },
-                { binding: 2, resource: { buffer: this.projectionBuffer! } },
-            ] });
+                // create three storage buffers: objects (array of mat4), camera (single mat4), projection (single mat4)
+                this.objectStorageBuffer = this.device.createBuffer({
+                    size: 64 * this.maxObjects, // 16 floats (64 bytes) per matrix
+                    usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST
+                });
+                this.cameraBuffer = this.device.createBuffer({
+                    size: 64,
+                    usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST
+                });
+                this.projectionBuffer = this.device.createBuffer({
+                    size: 64,
+                    usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST
+                });
 
-            const vertexBuffers = [{ attributes: [{ shaderLocation: 0, offset: 0, format: 'float32x3' }], arrayStride: 12, stepMode: 'vertex' }];
+                // write initial projection matrix
+                const initialProj = Matrix4x4.projectionMatrix(this.fov, (canvas.width || window.innerWidth) / (canvas.height || window.innerHeight), this.near, this.far);
+                this.device.queue.writeBuffer(this.projectionBuffer, 0, initialProj.toFloat32Array().buffer);
 
-            const pipelineDescriptor = {
-                vertex: { module: shaderModule, entryPoint: 'vertex_main', buffers: vertexBuffers },
-                fragment: { module: shaderModule, entryPoint: 'fragment_main', targets: [{ format: navigator.gpu.getPreferredCanvasFormat(), blend: { color: { srcFactor: 'one', dstFactor: 'one-minus-src-alpha' }, alpha: { srcFactor: 'one', dstFactor: 'one-minus-src-alpha' } } }] },
-                primitive: { topology: 'triangle-list', cullMode: 'back' },
-                layout: device.createPipelineLayout({ bindGroupLayouts: [bindGroupLayout] }),
-                multisample: { count: sampleCount },
-                depthStencil: { format: 'depth24plus', depthWriteEnabled: true, depthCompare: 'less' },
-            } as GPURenderPipelineDescriptor;
+                const bindGroupLayout = device.createBindGroupLayout({
+                    entries: [
+                        { binding: 0, visibility: GPUShaderStage.VERTEX, buffer: { type: 'read-only-storage' } },
+                        { binding: 1, visibility: GPUShaderStage.VERTEX, buffer: { type: 'read-only-storage' } },
+                        { binding: 2, visibility: GPUShaderStage.VERTEX, buffer: { type: 'read-only-storage' } },
+                    ],
+                });
+                this.bindGroup = device.createBindGroup({ layout: bindGroupLayout, entries: [
+                    { binding: 0, resource: { buffer: this.objectStorageBuffer! } },
+                    { binding: 1, resource: { buffer: this.cameraBuffer! } },
+                    { binding: 2, resource: { buffer: this.projectionBuffer! } },
+                ] });
 
-            this.renderPipeline = device.createRenderPipeline(pipelineDescriptor);
-            console.log('render pipeline created');
-            if (this.debugEl) this.debugEl.innerText += 'WebGPU: ready';
+                const vertexBuffers = [{ attributes: [{ shaderLocation: 0, offset: 0, format: 'float32x3' }], arrayStride: 12, stepMode: 'vertex' }];
 
-            const resizeCanvasAndDepthTexture = () => {
-                if (!this.canvas || !this.device) return;
-                this.canvas.width = window.innerWidth;
-                this.canvas.height = window.innerHeight;
-                if (this.depthTexture) this.depthTexture.destroy();
-                this.depthTexture = this.device!.createTexture({ size: { width: this.canvas.width, height: this.canvas.height, depthOrArrayLayers: 1 }, sampleCount, format: 'depth24plus', usage: GPUTextureUsage.RENDER_ATTACHMENT });
-                // update projection matrix buffer on resize
-                if (this.projectionBuffer) {
-                    const proj = Matrix4x4.projectionMatrix(this.fov, this.canvas.width / this.canvas.height, this.near, this.far);
-                    this.device.queue.writeBuffer(this.projectionBuffer, 0, proj.toFloat32Array().buffer);
-                }
-            };
+                const pipelineDescriptor = {
+                    vertex: { module: shaderModule, entryPoint: 'vertex_main', buffers: vertexBuffers },
+                    fragment: { module: shaderModule, entryPoint: 'fragment_main', targets: [{ format: navigator.gpu.getPreferredCanvasFormat(), blend: { color: { srcFactor: 'one', dstFactor: 'one-minus-src-alpha' }, alpha: { srcFactor: 'one', dstFactor: 'one-minus-src-alpha' } } }] },
+                    primitive: { topology: 'triangle-list', cullMode: 'back' },
+                    layout: device.createPipelineLayout({ bindGroupLayouts: [bindGroupLayout] }),
+                    multisample: { count: sampleCount },
+                    depthStencil: { format: 'depth24plus', depthWriteEnabled: true, depthCompare: 'less' },
+                } as GPURenderPipelineDescriptor;
 
-            window.addEventListener('resize', resizeCanvasAndDepthTexture);
-            resizeCanvasAndDepthTexture();
+                this.renderPipeline = device.createRenderPipeline(pipelineDescriptor);
+                console.log('render pipeline created');
+                if (this.debugEl) this.debugEl.innerText += 'WebGPU: ready';
+
+                const resizeCanvasAndDepthTexture = () => {
+                    if (!this.canvas || !this.device) return;
+                    this.canvas.width = window.innerWidth;
+                    this.canvas.height = window.innerHeight;
+                    if (this.depthTexture) this.depthTexture.destroy();
+                    this.depthTexture = this.device!.createTexture({ size: { width: this.canvas.width, height: this.canvas.height, depthOrArrayLayers: 1 }, sampleCount, format: 'depth24plus', usage: GPUTextureUsage.RENDER_ATTACHMENT });
+                    // update projection matrix buffer on resize
+                    if (this.projectionBuffer) {
+                        const proj = Matrix4x4.projectionMatrix(this.fov, this.canvas.width / this.canvas.height, this.near, this.far);
+                        this.device.queue.writeBuffer(this.projectionBuffer, 0, proj.toFloat32Array().buffer);
+                    }
+                };
+
+                window.addEventListener('resize', resizeCanvasAndDepthTexture);
+                resizeCanvasAndDepthTexture();
+            } catch (error) {
+                console.error('Failed to initialize WebGPU:', error);
+                if (this.debugEl) this.debugEl.innerText += 'WebGPU init error: ' + (error as Error).message;
+            }
+
+            return [adapter, device, canvas, context, format] as const;
         } catch (error) {
-            console.error('Failed to initialize WebGPU:', error);
-            if (this.debugEl) this.debugEl.innerText += 'WebGPU init error: ' + (error as Error).message;
-        }
+            console.error('WebGPU API unavailable or initialization failed:', error);
 
-        return [adapter, device, canvas, context, format] as const;
+            // Add instructions to the DOM
+            const instructions = document.createElement('div');
+            instructions.style.position = 'absolute';
+            instructions.style.top = '0';
+            instructions.style.left = '0';
+            instructions.style.width = '100%';
+            instructions.style.backgroundColor = '#ffcccc';
+            instructions.style.color = '#000';
+            instructions.style.padding = '10px';
+            instructions.style.fontFamily = 'Arial, sans-serif';
+            instructions.style.zIndex = '1000';
+            instructions.innerHTML = `
+                <strong>WebGPU is not supported or enabled in your browser.</strong><br>
+                To enable WebGPU, follow these instructions:<br>
+                <ul>
+                    <li><strong>Chrome:</strong> Go to <code>chrome://flags/#enable-unsafe-webgpu</code>, search for "WebGPU", and enable it.</li>
+                    <li><strong>Edge:</strong> Go to <code>edge://flags</code>, search for "WebGPU", and enable it.</li>
+                    <li><strong>Firefox:</strong> WebGPU is not yet supported.</li>
+                    <li><strong>Safari:</strong> Enable the "WebGPU" experimental feature in Safari's Develop menu.</li>
+                </ul>
+            `;
+            document.body.appendChild(instructions);
+        }
     }
 
     // allow external debug overlay to be provided by caller (main.ts)
