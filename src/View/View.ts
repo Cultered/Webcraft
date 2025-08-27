@@ -158,9 +158,9 @@ class View {
                 <strong>WebGPU is not supported or enabled in your browser.</strong><br>
                 To enable WebGPU, follow these instructions:<br>
                 <ul>
-                    <li><strong>Chrome:</strong> Go to <code>chrome://flags/#enable-unsafe-webgpu</code>, search for "WebGPU", and enable it.</li>
-                    <li><strong>Edge:</strong> Go to <code>edge://flags</code>, search for "WebGPU", and enable it.</li>
-                    <li><strong>Firefox:</strong> WebGPU is not yet supported.</li>
+                    <li><strong>Chrome:</strong> Go to <code>chrome://flags/#enable-unsafe-webgpu</code> and enable it.</li>
+                    <li><strong>Edge:</strong> Go to <code>edge://flags#enable-unsafe-webgpu</code> and enable it.</li>
+                    <li><strong>Firefox:</strong> Go to <code>about:config</code>, search for "dom.webgpu.enabled", and enable it.</li>
                     <li><strong>Safari:</strong> Enable the "WebGPU" experimental feature in Safari's Develop menu.</li>
                 </ul>
             `;
