@@ -8,6 +8,7 @@ class View {
     private device?: GPUDevice;
     private canvas?: HTMLCanvasElement;
     private context?: GPUCanvasContext;
+    private clearValue = { r: 0, g: 0., b: 0., a: 1. };
     private depthTexture?: GPUTexture;
     private renderPipeline?: GPURenderPipeline;
     // per-object buffers are stored in objectBuffers
@@ -268,7 +269,7 @@ class View {
         const renderPassDescriptor: GPURenderPassDescriptor = {
             colorAttachments: [{
                 view: this.context.getCurrentTexture().createView(),
-                clearValue: { r: 1, g: 1., b: 1., a: 1. } as GPUColor,
+                clearValue: this.clearValue as GPUColor,
                 loadOp: 'clear',
                 storeOp: 'store',
             }],
