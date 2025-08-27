@@ -1,4 +1,4 @@
-A short README for local development and project documentation.
+
 
 Run the dev server:
 
