@@ -1,5 +1,7 @@
 import View from './View/View';
 import Model from './Model/Model';
+import MeshComponent from './Model/Components/MeshComponent';
+import { generateSphereMesh, generateCubeMesh, LOD_MESH } from './misc/meshes';
 import { Vector4 } from './misc/Vector4';
 import { setupDebugElement } from './misc/setupDebugElement';
 import { setUpCanvas } from './misc/setUpCanvas';
@@ -19,17 +21,28 @@ if (!document.querySelector('#app')) {
 (async () => {
     const view = new View();
     const model = new Model();
-
-    view.uploadMeshes(model.getMeshes())
     await view.initWebGPU(setUpCanvas());
     const debugEl = setupDebugElement()
     view.setDebugElement(debugEl);
 
     model.addCamera('main-camera', new Vector4(0, 0, 0, 0), Matrix4x4.rotationalMatrix(new Vector4(0, 3, 0, 0)));
-    for (let i = 0; i < 100; i++) {
-        for (let j = 0; j < 100; j++) {
-            for (let k = 0; k < 100; k++) {
-                model.addEntity(`obj-${i}-${j}-${k}`, { meshKey: 'builtin-sphere', position: new Vector4(i * 2, j * 2, k * 2, 0), scale: new Vector4(0.1, 0.1, 0.1, 1) });
+    // create builtin meshes and upload them to the view; attach MeshComponents to entities as they are created
+    const sphereMesh = { id: 'builtin-sphere', ...generateSphereMesh(3, 1) };
+    const cubeMesh = { id: 'builtin-cube', ...generateCubeMesh(1) };
+    // upload meshes to GPU via view
+    view.uploadMeshToGPU(sphereMesh.id, sphereMesh.vertices, sphereMesh.indices);
+    view.uploadMeshToGPU(cubeMesh.id, cubeMesh.vertices, cubeMesh.indices);
+    view.uploadMeshToGPU(LOD_MESH.id, LOD_MESH.vertices, LOD_MESH.indices);
+
+    // create reusable MeshComponent instances
+    const sphereComponent = new MeshComponent(sphereMesh, true);
+
+    for (let i = 0; i < 30; i++) {
+        for (let j = 0; j < 30; j++) {
+            for (let k = 0; k < 30; k++) {
+                const id = `obj-${i}-${j}-${k}`;
+                model.addEntity(id, { position: new Vector4(i * 2, j * 2, k * 2, 0), scale: new Vector4(0.1, 0.1, 0.1, 1) });
+                model.addComponentToEntity(id, sphereComponent);
             }
         }
     }

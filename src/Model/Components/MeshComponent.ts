@@ -9,6 +9,9 @@ export class MeshComponent implements Component {
     start(entity: Entity) {
         entity.props.mesh = this.mesh.id
     }
+    restoreMesh(entity: Entity) {
+        entity.props.mesh = this.mesh.id
+    }
     LODReduce(entity: Entity) {
         if (this.useLOD) { entity.props.mesh = 'builtin-lod-mesh' }
     }

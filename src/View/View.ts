@@ -193,9 +193,7 @@ class View {
     // update last reference
     this.lastSceneObjectsRef = objects;
 
-        if (updateVertices) {
-            await this.uploadMeshBuffers();
-        }
+    // Vertex buffers are expected to be provided by Model via uploadMeshToGPU or uploadMeshes beforehand.
 
     // update storage buffer for objects (full upload each time)
     this.updateObjectStorageBufferPartial(objects);
@@ -221,21 +219,31 @@ class View {
     }
 
     uploadMeshes(meshes: { [id: string]: Mesh }): void {
-        this.meshes = meshes
-    }
-    private async uploadMeshBuffers() {
-        if (!this.device) return;
-        for (const meshId in this.meshes) {
-            if (this.objectBuffers.get(meshId)) continue;
-            const mesh = this.meshes[meshId];
-            const v = mesh.vertices;
-            const i = mesh.indices;
-            const vertexBuffer = this.device.createBuffer({ size: v.byteLength, usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST });
-            this.device.queue.writeBuffer(vertexBuffer, 0, v.buffer as ArrayBuffer, v.byteOffset, v.byteLength);
-            const indexBuffer = this.device.createBuffer({ size: i.byteLength, usage: GPUBufferUsage.INDEX | GPUBufferUsage.COPY_DST });
-            this.device.queue.writeBuffer(indexBuffer, 0, i.buffer as ArrayBuffer, i.byteOffset, i.byteLength);
-            this.objectBuffers.set(meshId, { vertexBuffer, indexBuffer, indices: i });
+        // merge meshes; Model may call this with the full map
+        for (const k of Object.keys(meshes)) this.meshes[k] = meshes[k];
+        // create GPU buffers for any meshes if device is ready
+        if (this.device) {
+            for (const k of Object.keys(meshes)) this.createBuffersForMesh(k);
         }
+    }
+
+    public uploadMeshToGPU(meshId: string, vertices: Float32Array, indices: Uint32Array | Uint16Array) {
+        this.meshes[meshId] = { id: meshId, vertices, indices };
+        if (this.device) this.createBuffersForMesh(meshId);
+    }
+
+    private createBuffersForMesh(meshId: string) {
+        if (!this.device) return;
+        if (this.objectBuffers.has(meshId)) return;
+        const mesh = this.meshes[meshId];
+        if (!mesh) return;
+        const v = mesh.vertices;
+        const i = mesh.indices;
+        const vertexBuffer = this.device.createBuffer({ size: v.byteLength, usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST });
+        this.device.queue.writeBuffer(vertexBuffer, 0, v.buffer as ArrayBuffer, v.byteOffset, v.byteLength);
+        const indexBuffer = this.device.createBuffer({ size: i.byteLength, usage: GPUBufferUsage.INDEX | GPUBufferUsage.COPY_DST });
+        this.device.queue.writeBuffer(indexBuffer, 0, i.buffer as ArrayBuffer, i.byteOffset, i.byteLength);
+        this.objectBuffers.set(meshId, { vertexBuffer, indexBuffer, indices: i });
     }
 
     // Update object storage buffer but only upload changed object matrices when possible.

@@ -2,8 +2,6 @@ import { Vector4 } from '../misc/Vector4';
 import { Matrix4x4 } from '../misc/Matrix4x4';
 import { Entity } from './Entity';
 import MeshComponent from './Components/MeshComponent';
-import { generateSphereMesh, generateCubeMesh } from '../misc/meshes';
-import { LOD_MESH } from '../misc/meshes';
 import type { Mesh } from '../misc/meshes';
 
 // keep old SceneObject shape for compatibility with View
@@ -22,9 +20,10 @@ export type SceneObject = {
 
 // Chunking constants (tuneable)
 export const CHUNK_SIZE = 10; // world units per chunk
-export let RENDER_DISTANCE = 12; // in chunks (Manhattan/max chunk distance)
-export let LOD_DISTANCE = 3; // in chunks (Manhattan/max chunk distance)
-export const CPU_SOFT_FRUSTUM_CULLING = true // removes 50% of unrendered objects, dont use with high render distance
+export let RENDER_DISTANCE = 8; // in chunks (Manhattan/max chunk distance)
+export let LOD_DISTANCE = 5; // in chunks (Manhattan/max chunk distance)
+export const CPU_SOFT_FRUSTUM_CULLING = true // removes 50% of unrendered objects, strain on cpu
+export const CPU_LOD = true // removes a lot of vertices, strain on cpu
 
 // Mesh is imported from misc/meshes
 
@@ -34,32 +33,36 @@ export default class Model {
     private cameras: Entity[] = [];
     // Map chunkKey -> entity ids contained
     private chunks: Map<string, string[]> = new Map();
-    private meshComponents: { [id: string]: MeshComponent } = {};
+    // meshComponents are created externally (main) and attached to entities
     // Cached visible object ids for the current camera chunk to avoid repeated recalculation
     private cachedVisibleObjects: string[] = [];
     private lastCameraChunkKey?: string;
+    // (no direct view reference) Mesh components are expected to be created and attached externally
     // Callback invoked when visible scene objects may have changed. Assign from caller (e.g., main) to re-register in View.
     public onSceneObjectsUpdated?: (objects: SceneObject[], updateVertices: boolean) => void;
 
     getMesh(id: string) {
-        return this.meshComponents[id]?.mesh
+        // search entities for a MeshComponent with the requested mesh id
+        for (const e of this.entities) {
+            const mc = e.components.find(c => c instanceof MeshComponent) as MeshComponent | undefined;
+            if (mc && mc.mesh && mc.mesh.id === id) return mc.mesh;
+        }
+        return undefined;
     }
     getMeshes(): { [id: string]: Mesh } {
         const out: { [id: string]: Mesh } = {};
-        for (const k of Object.keys(this.meshComponents)) {
-            const mc = this.meshComponents[k] as any;
-            if (mc && mc.mesh) out[k] = mc.mesh;
+        // iterate entities and collect unique meshes from attached MeshComponents
+        for (const e of this.entities) {
+            const mc = e.components.find(c => c instanceof MeshComponent) as MeshComponent | undefined;
+            if (mc && mc.mesh) {
+                out[mc.mesh.id] = mc.mesh;
+            }
         }
         return out;
     }
 
     constructor() {
-        const sphere = { id: 'builtin-sphere', ...generateSphereMesh(3, 1) } as Mesh;
-        const cube = { id: 'builtin-cube', ...generateCubeMesh(1) } as Mesh;
-
-        this.meshComponents['builtin-sphere'] = new MeshComponent(sphere, true);
-        this.meshComponents['builtin-cube'] = new MeshComponent(cube, true);
-        this.meshComponents['builtin-lod-mesh'] = new MeshComponent(LOD_MESH, false);
+        // Mesh components are created locally; uploading to the GPU is the responsibility of the caller (main)
     }
 
 
@@ -70,15 +73,9 @@ export default class Model {
         position?: Vector4,
         rotation?: Matrix4x4,
         scale?: Vector4,
-        meshKey?: string,
         components?: any[]
     } = {}) {
         const ent = new Entity(id, opts.position, opts.rotation, opts.scale);
-        if (opts.meshKey) {
-            ent.props.mesh = opts.meshKey;
-            const mc = this.meshComponents[opts.meshKey];
-            if (mc) ent.addComponent(mc);
-        }
         if (opts.components) {
             for (const c of opts.components) ent.addComponent(c);
         }
@@ -87,6 +84,8 @@ export default class Model {
         this.assignToChunk(ent);
         return ent;
     }
+
+    // Mesh components are expected to be created and attached externally (e.g., in main).
 
     // Returns objects that are within RENDER_DISTANCE (in chunks) from the primary camera ("main-camera").
     // This keeps the view focused only on nearby chunks. If no camera exists, return all objects as fallback.
@@ -105,30 +104,7 @@ export default class Model {
             // map cached ids back to SceneObject view
             return this.cachedVisibleObjects.map(id => this.entityMap.get(id)).filter(Boolean).map(e => this.entityToSceneObject(e!));
         }
-        if (this.lastCameraChunkKey !== camChunkKey) {
-            // For all chunks within RENDER_DISTANCE but outside LOD_DISTANCE, run MeshComponent's LODReduce
-            for (let dx = -RENDER_DISTANCE; dx <= RENDER_DISTANCE; dx++) {
-                for (let dy = -RENDER_DISTANCE; dy <= RENDER_DISTANCE; dy++) {
-                    for (let dz = -RENDER_DISTANCE; dz <= RENDER_DISTANCE; dz++) {
-                        const distSq = dx * dx + dy * dy + dz * dz;
-                        if (distSq > RENDER_DISTANCE * RENDER_DISTANCE || distSq <= LOD_DISTANCE * LOD_DISTANCE) continue;
-                        const key = `${camChunk.x + dx},${camChunk.y + dy},${camChunk.z + dz}`;
-                        const ids = this.chunks.get(key);
-                        if (ids) {
-                            for (const id of ids) {
-                                const mc = this.entityMap.get(id);
-                                if (mc) {
-                                    const meshComp = mc.components.find(c => c instanceof MeshComponent) as MeshComponent;
-                                    if (meshComp) meshComp.LODReduce(mc);
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        const collected = new Set<string>();
+        const collected = new Set<Entity>();
         for (let dx = -RENDER_DISTANCE; dx <= RENDER_DISTANCE; dx++) {
             for (let dy = -RENDER_DISTANCE; dy <= RENDER_DISTANCE; dy++) {
                 for (let dz = -RENDER_DISTANCE; dz <= RENDER_DISTANCE; dz++) {
@@ -138,15 +114,32 @@ export default class Model {
                     }
                     const key = `${camChunk.x + dx},${camChunk.y + dy},${camChunk.z + dz}`;
                     const ids = this.chunks.get(key);
-                    if (ids) ids.forEach(id => collected.add(id));
+                    if (ids) {
+                        ids.forEach(id => {
+                            const ent = this.entityMap.get(id);
+                            if (CPU_LOD) {
+                                const mc = ent && ent.components.find(c => c instanceof MeshComponent) as MeshComponent;
+                                if (dx * dx + dy * dy + dz * dz > LOD_DISTANCE * LOD_DISTANCE) {
+                                    if (ent && mc) {
+                                        mc.LODReduce(ent);
+                                    }
+
+                                }
+                                else if (ent && mc) {
+                                    mc?.restoreMesh(ent)
+                                };
+                            }
+                            if (ent) collected.add(ent);
+                        });
+                    }
                 }
             }
         }
 
         // store cached visible ids; map back to SceneObject when returning
-        this.cachedVisibleObjects = Array.from(collected);
+        this.cachedVisibleObjects = Array.from(collected).map(e => e.id);
         this.lastCameraChunkKey = camChunkKey;
-        return this.cachedVisibleObjects.map(id => this.entityMap.get(id)).filter(Boolean).map(e => this.entityToSceneObject(e!));
+        return Array.from(collected).map(e => this.entityToSceneObject(e));
     }
 
     // Public API to move an object. Position is effectively immutable from outside except via this call.

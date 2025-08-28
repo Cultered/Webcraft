@@ -10,7 +10,7 @@ export class Rotator implements Component {
         this.speed = speed;
         this.axis = axis;
     }
-    start(entity: Entity) {
+    start(_entity: Entity) {
         return
     }
     update(entity: Entity, deltaMs?: number) {
