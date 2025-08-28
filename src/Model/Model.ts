@@ -28,8 +28,8 @@ export const CPU_LOD = true // removes a lot of vertices, strain on cpu
 // Mesh is imported from misc/meshes
 
 export default class Model {
-    private entities: Entity[] = [];
-    private entityMap: Map<string, Entity> = new Map();
+    // store entities in a Map keyed by id for O(1) lookup and iteration via values()
+    private entities: Map<string, Entity> = new Map();
     private cameras: Entity[] = [];
     // Map chunkKey -> entity ids contained
     private chunks: Map<string, string[]> = new Map();
@@ -43,8 +43,8 @@ export default class Model {
 
     getMesh(id: string) {
         // search entities for a MeshComponent with the requested mesh id
-        for (const e of this.entities) {
-            const mc = e.components.find(c => c instanceof MeshComponent) as MeshComponent | undefined;
+    for (const e of this.entities.values()) {
+            const mc = e.getComponent(MeshComponent) as MeshComponent | undefined;
             if (mc && mc.mesh && mc.mesh.id === id) return mc.mesh;
         }
         return undefined;
@@ -52,8 +52,8 @@ export default class Model {
     getMeshes(): { [id: string]: Mesh } {
         const out: { [id: string]: Mesh } = {};
         // iterate entities and collect unique meshes from attached MeshComponents
-        for (const e of this.entities) {
-            const mc = e.components.find(c => c instanceof MeshComponent) as MeshComponent | undefined;
+    for (const e of this.entities.values()) {
+            const mc = e.getComponent(MeshComponent) as MeshComponent | undefined;
             if (mc && mc.mesh) {
                 out[mc.mesh.id] = mc.mesh;
             }
@@ -75,12 +75,23 @@ export default class Model {
         scale?: Vector4,
         components?: any[]
     } = {}) {
-        const ent = new Entity(id, opts.position, opts.rotation, opts.scale);
+    const ent = new Entity(id, opts.position, opts.rotation, opts.scale);
         if (opts.components) {
             for (const c of opts.components) ent.addComponent(c);
         }
-        this.entities.push(ent);
-        this.entityMap.set(ent.id, ent);
+    this.entities.set(ent.id, ent);
+    this.assignToChunk(ent);
+        return ent;
+    }
+
+    // Accept an externally-created Entity instance and register it with the model.
+    // This allows callers to construct an Entity, add components, then add it to the model.
+    addExistingEntity(ent: Entity) {
+        if (this.getEntityById(ent.id)) {
+            console.warn(`Entity with id ${ent.id} already exists in Model. Skipping add.`);
+            return this.getEntityById(ent.id);
+        }
+    this.entities.set(ent.id, ent);
         this.assignToChunk(ent);
         return ent;
     }
@@ -92,7 +103,7 @@ export default class Model {
     // Return SceneObject[] shaped view for compatibility with View.ts
     getObjects() {
         const camera = this.getCamera('main-camera');
-        if (!camera) return this.entities.map(e => this.entityToSceneObject(e));
+    if (!camera) return Array.from(this.entities.values()).map(e => this.entityToSceneObject(e));
 
         const camPos = camera.position;
         const camChunk = this.chunkCoordsFromPosition(camPos);
@@ -102,7 +113,7 @@ export default class Model {
 
         if (this.lastCameraChunkKey === camChunkKey && !CPU_SOFT_FRUSTUM_CULLING) {
             // map cached ids back to SceneObject view
-            return this.cachedVisibleObjects.map(id => this.entityMap.get(id)).filter(Boolean).map(e => this.entityToSceneObject(e!));
+            return this.cachedVisibleObjects.map(id => this.entities.get(id)).filter(Boolean).map(e => this.entityToSceneObject(e!));
         }
         const collected = new Set<Entity>();
         for (let dx = -RENDER_DISTANCE; dx <= RENDER_DISTANCE; dx++) {
@@ -116,9 +127,9 @@ export default class Model {
                     const ids = this.chunks.get(key);
                     if (ids) {
                         ids.forEach(id => {
-                            const ent = this.entityMap.get(id);
+                            const ent = this.getEntityById(id);
                             if (CPU_LOD) {
-                                const mc = ent && ent.components.find(c => c instanceof MeshComponent) as MeshComponent;
+                                const mc = ent && ent.getComponent(MeshComponent) as MeshComponent;
                                 if (dx * dx + dy * dy + dz * dz > LOD_DISTANCE * LOD_DISTANCE) {
                                     if (ent && mc) {
                                         mc.LODReduce(ent);
@@ -144,7 +155,7 @@ export default class Model {
 
     // Public API to move an object. Position is effectively immutable from outside except via this call.
     setObjectPosition(id: string, newPos: Vector4) {
-        const ent = this.entityMap.get(id) ?? this.entities.find(o => o.id === id);
+    const ent = this.entities.get(id);
         if (!ent) return false;
         const oldChunk = ent.props.chunkKey;
         ent.position = newPos;
@@ -226,8 +237,9 @@ export default class Model {
 
     update(deltaMs: number) {
         // Run entity components
-        for (const e of this.entities) {
-            e.update(deltaMs);
+    for (const e of this.entities.values()) {
+            // iterator result depends on Set vs Array; using values() for Set
+            (e as Entity).update(deltaMs);
         }
     }
 
@@ -244,9 +256,14 @@ export default class Model {
 
     // Add a component instance to an entity by id
     addComponentToEntity(id: string, component: any) {
-        const ent = this.entities.find(e => e.id === id);
+    const ent = this.entities.get(id);
         if (!ent) return false;
         ent.addComponent(component);
         return true;
+    }
+
+    // Helper to find an entity by id when entities are stored in a Set
+    getEntityById(id: string) {
+    return this.entities.get(id);
     }
 }

@@ -8,7 +8,8 @@ export class Entity {
     position: Vector4;
     rotation: Matrix4x4;
     scale: Vector4;
-    components: Component[] = [];
+    // components keyed by constructor name for fast lookup
+    components: Map<string, Component> = new Map();
     // keep props for backwards-compatibility with existing View code
     props: any = {};
 
@@ -21,16 +22,24 @@ export class Entity {
     }
 
     addComponent<T extends Component>(c: T): T {
-        this.components.push(c);
-        c.start(this)
+        const key = (c as any).constructor?.name ?? String(Math.random());
+        this.components.set(key, c);
+        c.start(this);
         return c;
     }
 
     getComponent<T extends Component>(ctor: new (...args: any[]) => T): T | undefined {
-        return this.components.find(c => c instanceof ctor) as T | undefined;
+        const key = (ctor as any).name;
+        return this.components.get(key) as T | undefined;
     }
+
     update(deltaMs?: number) {
-        return this.components.map(c => c.update?(c.update(this, deltaMs)) : null);
+        const out: any[] = [];
+        for (const c of this.components.values()) {
+            if (c.update) out.push(c.update(this, deltaMs));
+            else out.push(null);
+        }
+        return out;
     }
 }
 

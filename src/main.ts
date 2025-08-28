@@ -1,6 +1,7 @@
 import View from './View/View';
 import Model from './Model/Model';
 import MeshComponent from './Model/Components/MeshComponent';
+import { Entity } from './Model/Entity';
 import { generateSphereMesh, generateCubeMesh, LOD_MESH } from './misc/meshes';
 import { Vector4 } from './misc/Vector4';
 import { setupDebugElement } from './misc/setupDebugElement';
@@ -37,12 +38,16 @@ if (!document.querySelector('#app')) {
     // create reusable MeshComponent instances
     const sphereComponent = new MeshComponent(sphereMesh, true);
 
-    for (let i = 0; i < 30; i++) {
-        for (let j = 0; j < 30; j++) {
-            for (let k = 0; k < 30; k++) {
+    for (let i = 0; i < 100; i++) {
+        for (let j = 0; j < 100; j++) {
+            for (let k = 0; k < 100; k++) {
                 const id = `obj-${i}-${j}-${k}`;
-                model.addEntity(id, { position: new Vector4(i * 2, j * 2, k * 2, 0), scale: new Vector4(0.1, 0.1, 0.1, 1) });
-                model.addComponentToEntity(id, sphereComponent);
+                // create Entity instance first
+                const ent = new Entity(id, new Vector4(i * 2, j * 2, k * 2, 0), undefined, new Vector4(0.1, 0.1, 0.1, 1));
+                // attach components before registering with the model
+                ent.addComponent(sphereComponent);
+                // now add the fully-constructed entity to the model
+                model.addExistingEntity(ent);
             }
         }
     }
