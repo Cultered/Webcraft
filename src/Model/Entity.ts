@@ -17,19 +17,20 @@ export class Entity {
         this.position = position ?? new Vector4(0, 0, 0, 1);
         this.rotation = rotation ?? Matrix4x4.identity();
         this.scale = scale ?? new Vector4(1, 1, 1, 1);
+        
     }
 
     addComponent<T extends Component>(c: T): T {
         this.components.push(c);
+        c.start(this)
         return c;
     }
 
     getComponent<T extends Component>(ctor: new (...args: any[]) => T): T | undefined {
         return this.components.find(c => c instanceof ctor) as T | undefined;
     }
-
-    runComponents(deltaMs?: number) {
-        return this.components.map(c => c.run(this, deltaMs));
+    update(deltaMs?: number) {
+        return this.components.map(c => c.update?(c.update(this, deltaMs)) : null);
     }
 }
 

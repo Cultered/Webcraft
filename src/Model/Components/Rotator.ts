@@ -10,7 +10,10 @@ export class Rotator implements Component {
         this.speed = speed;
         this.axis = axis;
     }
-    run(entity: Entity, deltaMs?: number) {
+    start(entity: Entity) {
+        return
+    }
+    update(entity: Entity, deltaMs?: number) {
         const seconds = (deltaMs ?? 16) / 1000;
         const rot = Matrix4x4.rotationalMatrix(new Vector4(this.axis.x * this.speed * seconds, this.axis.y * this.speed * seconds, this.axis.z * this.speed * seconds, 0));
         entity.rotation = entity.rotation.mulMatrix(rot);

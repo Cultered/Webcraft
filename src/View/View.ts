@@ -1,7 +1,8 @@
 import { renderer } from './shaders/renderer';
 import { Matrix4x4 } from '../misc/Matrix4x4';
 import { Vector4 } from '../misc/Vector4';
-import type { Mesh, SceneObject } from '../Model/Model';
+import type { SceneObject } from '../Model/Model';
+import type { Mesh } from '../misc/meshes';
 
 class View {
     // GPU related
@@ -224,15 +225,16 @@ class View {
     }
     private async uploadMeshBuffers() {
         if (!this.device) return;
-        for (const obj of this.sceneObjects) {
-            if (this.objectBuffers.get(obj.props.mesh!)) continue;
-            const v = this.meshes[obj.props.mesh!].vertices;
-            const i = this.meshes[obj.props.mesh!].indices;
+        for (const meshId in this.meshes) {
+            if (this.objectBuffers.get(meshId)) continue;
+            const mesh = this.meshes[meshId];
+            const v = mesh.vertices;
+            const i = mesh.indices;
             const vertexBuffer = this.device.createBuffer({ size: v.byteLength, usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST });
             this.device.queue.writeBuffer(vertexBuffer, 0, v.buffer as ArrayBuffer, v.byteOffset, v.byteLength);
             const indexBuffer = this.device.createBuffer({ size: i.byteLength, usage: GPUBufferUsage.INDEX | GPUBufferUsage.COPY_DST });
             this.device.queue.writeBuffer(indexBuffer, 0, i.buffer as ArrayBuffer, i.byteOffset, i.byteLength);
-            this.objectBuffers.set(obj.props.mesh!, { vertexBuffer, indexBuffer, indices: i });
+            this.objectBuffers.set(meshId, { vertexBuffer, indexBuffer, indices: i });
         }
     }
 
