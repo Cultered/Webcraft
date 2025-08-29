@@ -1,6 +1,6 @@
 export function setUpCanvas():HTMLCanvasElement{
     const canvas = document.createElement('canvas');
-    canvas.id = 'webgpu-canvas';
+    canvas.id = 'main-canvas';
     canvas.style.width = '100vw';
     canvas.style.height = '100vh';
     canvas.style.display = 'block';

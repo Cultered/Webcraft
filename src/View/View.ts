@@ -1,8 +1,9 @@
-import { renderer } from './shaders/renderer';
+import { renderer } from './shaders/default-wgsl-renderer';
 import { Matrix4x4 } from '../misc/Matrix4x4';
 import { Vector4 } from '../misc/Vector4';
-import type { SceneObject } from '../Model/Model';
-import type { Mesh } from '../misc/meshes';
+import type { SceneObject } from '../Types/SceneObject';
+import type { Mesh } from '../Types/Mesh';
+import { ShowWebGPUInstructions } from '../misc/misc';
 
 class View {
     private device?: GPUDevice;
@@ -21,7 +22,7 @@ class View {
     private near = 0.1;
     private far = 1000;
     private meshes: { [id: string]: Mesh } = {};
-
+    private WebGPUBackend = false;
     private sceneObjects: SceneObject[] = [];
     private lastSceneObjectsRef?: SceneObject[];
     private lastCameraKey?: string;
@@ -32,6 +33,10 @@ class View {
         scale: new Vector4(1, 1, 1, 1),
         props: {}
     };
+
+    public setWebGPUBackend(enabled: boolean) {
+        this.WebGPUBackend = enabled;
+    }
 
     private debugEl?: HTMLDivElement;
 
@@ -125,28 +130,7 @@ class View {
 
             return [adapter, device, canvas, context, format] as const;
         } catch (error) {
-            console.error('WebGPU API unavailable or initialization failed:', error);
-            const instructions = document.createElement('div');
-            instructions.style.position = 'absolute';
-            instructions.style.top = '0';
-            instructions.style.left = '0';
-            instructions.style.width = '100%';
-            instructions.style.backgroundColor = '#ffcccc';
-            instructions.style.color = '#000';
-            instructions.style.padding = '10px';
-            instructions.style.fontFamily = 'Arial, sans-serif';
-            instructions.style.zIndex = '1000';
-            instructions.innerHTML = `
-                <strong>WebGPU is not supported or enabled in your browser.</strong><br>
-                To enable WebGPU, follow these instructions:<br>
-                <ul>
-                    <li><strong>Chrome:</strong> Go to <code>chrome://flags/#enable-unsafe-webgpu</code> and enable it.</li>
-                    <li><strong>Edge:</strong> Go to <code>edge://flags#enable-unsafe-webgpu</code> and enable it.</li>
-                    <li><strong>Firefox:</strong> Go to <code>about:config</code>, search for "dom.webgpu.enabled", and enable it.</li>
-                    <li><strong>Safari:</strong> Enable the "WebGPU" experimental feature in Safari's Develop menu.</li>
-                </ul>
-            `;
-            document.body.appendChild(instructions);
+            ShowWebGPUInstructions()
         }
     }
 
@@ -225,8 +209,11 @@ class View {
         }
         this.device.queue.writeBuffer(this.objectStorageBuffer!, 0, allObjectMatricesBuffer.buffer, 0, objectCount * 16 * 4);
     }
-
     render(): void {
+        this.renderWGPU();
+    }
+
+    renderWGPU(): void {
         if (!this.device || !this.context || !this.renderPipeline || !this.depthTexture || !this.bindGroup) {
             console.warn('Render skipped: device/context/pipeline not ready');
             if (this.debugEl) this.debugEl.innerText += 'Render skipped: device/context/pipeline not ready';

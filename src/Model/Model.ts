@@ -2,36 +2,19 @@ import { Vector4 } from '../misc/Vector4';
 import { Matrix4x4 } from '../misc/Matrix4x4';
 import { Entity } from './Entity';
 import MeshComponent from './Components/MeshComponent';
-import type { Mesh } from '../misc/meshes';
+import type { Mesh } from '../Types/Mesh';
+import type { Optimizations } from '../Types/Optimizations';
+import type { SceneObject } from '../Types/SceneObject';
+import type View from '../View/View';
 
-export type SceneObject = {
-    id: string;
-    position: Vector4;
-    rotation: Matrix4x4;
-    scale: Vector4;
-    props: {
-        mesh?: string
-        inverseRotation?: Matrix4x4
-        updateInverseRotation?: boolean
-        chunkKey?: string
-    };
-};
-
-export type Optimizations = {
-    CPU_CHUNKS: boolean
-    CHUNK_SIZE: number
-    RENDER_DISTANCE: number
-    LOD_DISTANCE: number
-    CPU_SOFT_FRUSTUM_CULLING: boolean
-    CPU_LOD: boolean
-};
 export const o11s: Optimizations = {
-    CPU_CHUNKS: false,
+    CPU_CHUNKS: true,
     CHUNK_SIZE: 10,
     RENDER_DISTANCE: 6,
     LOD_DISTANCE: 3,
     CPU_SOFT_FRUSTUM_CULLING: true,
     CPU_LOD: true,
+    USE_WEBGPU:true
 }
 
 export default class Model {
@@ -60,7 +43,8 @@ export default class Model {
         return out;
     }
 
-    constructor() {
+    constructor(view: View) {
+        view.setWebGPUBackend(o11s.USE_WEBGPU);
     }
 
     addEntity(id: string, opts: {

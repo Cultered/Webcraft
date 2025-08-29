@@ -2,7 +2,7 @@ import View from './View/View';
 import Model from './Model/Model';
 import MeshComponent from './Model/Components/MeshComponent';
 import { Entity } from './Model/Entity';
-import { generateSphereMesh, generateCubeMesh, LOD_MESH } from './misc/meshes';
+import { generateSphereMesh, generateCubeMesh, LOD_MESH } from './Types/Mesh';
 import { Vector4 } from './misc/Vector4';
 import { setupDebugElement } from './misc/setupDebugElement';
 import { setUpCanvas } from './misc/setUpCanvas';
@@ -20,7 +20,7 @@ if (!document.querySelector('#app')) {
 
 (async () => {
     const view = new View();
-    const model = new Model();
+    const model = new Model(view);
     await view.initWebGPU(setUpCanvas());
     const debugEl = setupDebugElement()
     view.setDebugElement(debugEl);
@@ -49,7 +49,7 @@ if (!document.querySelector('#app')) {
 
     await view.registerSceneObjects(model.getObjects(), true);
 
-    const canvasEl = document.querySelector('#webgpu-canvas') as HTMLCanvasElement;
+    const canvasEl = document.querySelector('#main-canvas') as HTMLCanvasElement;
     const controller = new Controller(model, () => renderLoop());
     controller.init(canvasEl, debugEl);
     controller.start();
