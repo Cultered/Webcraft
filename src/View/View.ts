@@ -5,31 +5,25 @@ import type { SceneObject } from '../Model/Model';
 import type { Mesh } from '../misc/meshes';
 
 class View {
-    // GPU related
     private device?: GPUDevice;
     private canvas?: HTMLCanvasElement;
     private context?: GPUCanvasContext;
     private clearValue = { r: 0, g: 0., b: 0., a: 1. };
     private depthTexture?: GPUTexture;
     private renderPipeline?: GPURenderPipeline;
-    // per-object buffers are stored in objectBuffers
     private objectBuffers = new Map<string, { vertexBuffer: GPUBuffer; indexBuffer: GPUBuffer; indices: Uint32Array | Uint16Array }>();
     private bindGroup?: GPUBindGroup;
-    private objectStorageBuffer?: GPUBuffer; // per-object model matrices
-    private cameraBuffer?: GPUBuffer; // single camera matrix
-    private projectionBuffer?: GPUBuffer; // single projection matrix
-    public maxObjects = 1000000; // max objects in scene, dynamic
-    private fov = 30; // field of view in degrees
-    private near = 0.1; // near plane distance
-    private far = 1000; // far plane distance, also used in cpu culling
+    private objectStorageBuffer?: GPUBuffer;
+    private cameraBuffer?: GPUBuffer;
+    private projectionBuffer?: GPUBuffer;
+    public maxObjects = 1000000;
+    private fov = 30;
+    private near = 0.1;
+    private far = 1000;
     private meshes: { [id: string]: Mesh } = {};
 
-    // Scene
     private sceneObjects: SceneObject[] = [];
-    // cache last assigned objects reference to avoid reprocessing
     private lastSceneObjectsRef?: SceneObject[];
-    // (no id->index mapping needed for full uploads)
-    // cache camera key to detect changes
     private lastCameraKey?: string;
     private camera: SceneObject = {
         id: 'viewCamera',
@@ -39,15 +33,8 @@ class View {
         props: {}
     };
 
-    // debug
     private debugEl?: HTMLDivElement;
 
-    // model generation moved to Model.ts
-
-    /**
-     * Initialize WebGPU using an externally created canvas element.
-     * The caller is responsible for creating/appending the canvas to the DOM.
-     */
     async initWebGPU(canvas: HTMLCanvasElement) {
         try {
             const adapter = await navigator.gpu.requestAdapter({ powerPreference: 'high-performance' });
@@ -57,7 +44,6 @@ class View {
             const format = navigator.gpu.getPreferredCanvasFormat();
             context.configure({ device, format, alphaMode: 'premultiplied' });
 
-            // store
             this.device = device;
             this.canvas = canvas;
             this.context = context;
@@ -74,9 +60,8 @@ class View {
                 const shader = renderer;
                 const shaderModule = device.createShaderModule({ code: shader });
 
-                // create three storage buffers: objects (array of mat4), camera (single mat4), projection (single mat4)
                 this.objectStorageBuffer = this.device.createBuffer({
-                    size: 64 * this.maxObjects, // 16 floats (64 bytes) per matrix
+                    size: 64 * this.maxObjects,
                     usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST
                 });
                 this.cameraBuffer = this.device.createBuffer({
@@ -88,7 +73,6 @@ class View {
                     usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST
                 });
 
-                // write initial projection matrix
                 const initialProj = Matrix4x4.projectionMatrix(this.fov, (canvas.width || window.innerWidth) / (canvas.height || window.innerHeight), this.near, this.far);
                 this.device.queue.writeBuffer(this.projectionBuffer, 0, initialProj.toFloat32Array().buffer);
 
@@ -126,7 +110,6 @@ class View {
                     this.canvas.height = window.innerHeight;
                     if (this.depthTexture) this.depthTexture.destroy();
                     this.depthTexture = this.device!.createTexture({ size: { width: this.canvas.width, height: this.canvas.height, depthOrArrayLayers: 1 }, sampleCount, format: 'depth24plus', usage: GPUTextureUsage.RENDER_ATTACHMENT });
-                    // update projection matrix buffer on resize
                     if (this.projectionBuffer) {
                         const proj = Matrix4x4.projectionMatrix(this.fov, this.canvas.width / this.canvas.height, this.near, this.far);
                         this.device.queue.writeBuffer(this.projectionBuffer, 0, proj.toFloat32Array().buffer);
@@ -143,8 +126,6 @@ class View {
             return [adapter, device, canvas, context, format] as const;
         } catch (error) {
             console.error('WebGPU API unavailable or initialization failed:', error);
-
-            // Add instructions to the DOM
             const instructions = document.createElement('div');
             instructions.style.position = 'absolute';
             instructions.style.top = '0';
@@ -169,37 +150,23 @@ class View {
         }
     }
 
-    // allow external debug overlay to be provided by caller (main.ts)
     public setDebugElement(el: HTMLDivElement) {
         this.debugEl = el;
     }
 
-
-
-    // Register scene objects (from Model) so View can upload buffers and draw
     async registerSceneObjects(objects: SceneObject[], updateVertices: boolean) {
         if (!this.device) throw new Error('Device not initialized');
-        // If the exact same array reference was provided and no vertex update is requested,
-        // skip heavy work. Model returns a cached array reference per camera chunk, so this
-        // avoids recomputing when camera hasn't moved between chunks.
             if (objects === this.lastSceneObjectsRef && !updateVertices) {
-                // same array reference: avoid re-uploading meshes, but object transforms may have changed
-                // so still update the object storage buffer (full upload)
                 this.updateObjectStorageBufferPartial(objects);
                 return;
             }
 
         this.sceneObjects = objects;
-    // update last reference
-    this.lastSceneObjectsRef = objects;
+        this.lastSceneObjectsRef = objects;
 
-    // Vertex buffers are expected to be provided by Model via uploadMeshToGPU or uploadMeshes beforehand.
-
-    // update storage buffer for objects (full upload each time)
-    this.updateObjectStorageBufferPartial(objects);
+        this.updateObjectStorageBufferPartial(objects);
     }
     registerCamera(camera: SceneObject) {
-        // Build a simple camera key from position and rotation to detect changes.
         const camKey = `${camera.position.x},${camera.position.y},${camera.position.z}|${JSON.stringify(camera.rotation)}`;
         if (camKey === this.lastCameraKey) {
             this.camera = camera;
@@ -208,20 +175,15 @@ class View {
         this.camera = camera;
         this.lastCameraKey = camKey;
 
-        // update camera buffer: camera transform = camera.rotation * translation(-camera.position)
         if (this.device && this.cameraBuffer) {
             const negPos = new Vector4(-camera.position.x, -camera.position.y, -camera.position.z, 0);
             const camTransform = camera.rotation.mulMatrix(Matrix4x4.translationMatrix(negPos));
             this.device.queue.writeBuffer(this.cameraBuffer, 0, camTransform.toFloat32Array().buffer);
         }
-
-    // camera transform written above; object model matrices do not depend on camera so we avoid recomputing them here
     }
 
     uploadMeshes(meshes: { [id: string]: Mesh }): void {
-        // merge meshes; Model may call this with the full map
         for (const k of Object.keys(meshes)) this.meshes[k] = meshes[k];
-        // create GPU buffers for any meshes if device is ready
         if (this.device) {
             for (const k of Object.keys(meshes)) this.createBuffersForMesh(k);
         }
@@ -246,12 +208,9 @@ class View {
         this.objectBuffers.set(meshId, { vertexBuffer, indexBuffer, indices: i });
     }
 
-    // Update object storage buffer but only upload changed object matrices when possible.
     private updateObjectStorageBufferPartial(objects: SceneObject[]) {
         if (!this.device) throw new Error('Device not initialized');
-        // Simplified behavior: always upload all object matrices each call.
         const objectCount = objects.length;
-        // resize buffer if needed
         if (objectCount > this.maxObjects || !this.objectStorageBuffer) {
             this.maxObjects = Math.max(objectCount, this.maxObjects);
             this.objectStorageBuffer?.destroy();
@@ -264,10 +223,8 @@ class View {
             const matrix = Matrix4x4.translationMatrix(obj.position).mulMatrix(obj.rotation).mulMatrix(Matrix4x4.scaleMatrix(obj.scale));
             allObjectMatricesBuffer.set(matrix.toFloat32Array(), i * 16);
         }
-        // write full region that contains active objects
         this.device.queue.writeBuffer(this.objectStorageBuffer!, 0, allObjectMatricesBuffer.buffer, 0, objectCount * 16 * 4);
     }
-
 
     render(): void {
         if (!this.device || !this.context || !this.renderPipeline || !this.depthTexture || !this.bindGroup) {
@@ -296,7 +253,6 @@ class View {
             const passEncoder = commandEncoder.beginRenderPass(renderPassDescriptor);
             passEncoder.setPipeline(this.renderPipeline);
 
-            // draw each registered object
             let currentMeshId: string = "empty";
             let instanceIndex = 0;
             let objIndex = 0;
@@ -323,9 +279,7 @@ class View {
             passEncoder.end();
             this.device.queue.submit([commandEncoder.finish()]);
 
-            // debug
             if (this.debugEl) {
-
                 this.debugEl.innerText += `WebGPU ready\nObjects: ${objIndex}\nBuffers: ${this.objectBuffers.size}`;
                 this.debugEl.innerText += `\nCamerar: x${this.camera.position.x} y${this.camera.position.y} z${this.camera.position.z}`;
             }

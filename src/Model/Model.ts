@@ -4,7 +4,6 @@ import { Entity } from './Entity';
 import MeshComponent from './Components/MeshComponent';
 import type { Mesh } from '../misc/meshes';
 
-// keep old SceneObject shape for compatibility with View
 export type SceneObject = {
     id: string;
     position: Vector4;
@@ -18,31 +17,21 @@ export type SceneObject = {
     };
 };
 
-// Chunking constants (tuneable)
-export const CHUNK_SIZE = 10; // world units per chunk
-export let RENDER_DISTANCE = 8; // in chunks (Manhattan/max chunk distance)
-export let LOD_DISTANCE = 5; // in chunks (Manhattan/max chunk distance)
-export const CPU_SOFT_FRUSTUM_CULLING = true // removes 50% of unrendered objects, strain on cpu
-export const CPU_LOD = true // removes a lot of vertices, strain on cpu
-
-// Mesh is imported from misc/meshes
+export const CHUNK_SIZE = 10;
+export let RENDER_DISTANCE = 8;
+export let LOD_DISTANCE = 5;
+export const CPU_SOFT_FRUSTUM_CULLING = true
+export const CPU_LOD = true
 
 export default class Model {
-    // store entities in a Map keyed by id for O(1) lookup and iteration via values()
     private entities: Map<string, Entity> = new Map();
     private cameras: Entity[] = [];
-    // Map chunkKey -> entity ids contained
     private chunks: Map<string, string[]> = new Map();
-    // meshComponents are created externally (main) and attached to entities
-    // Cached visible object ids for the current camera chunk to avoid repeated recalculation
     private cachedVisibleObjects: string[] = [];
     private lastCameraChunkKey?: string;
-    // (no direct view reference) Mesh components are expected to be created and attached externally
-    // Callback invoked when visible scene objects may have changed. Assign from caller (e.g., main) to re-register in View.
     public onSceneObjectsUpdated?: (objects: SceneObject[], updateVertices: boolean) => void;
 
     getMesh(id: string) {
-        // search entities for a MeshComponent with the requested mesh id
     for (const e of this.entities.values()) {
             const mc = e.getComponent(MeshComponent) as MeshComponent | undefined;
             if (mc && mc.mesh && mc.mesh.id === id) return mc.mesh;
@@ -51,7 +40,6 @@ export default class Model {
     }
     getMeshes(): { [id: string]: Mesh } {
         const out: { [id: string]: Mesh } = {};
-        // iterate entities and collect unique meshes from attached MeshComponents
     for (const e of this.entities.values()) {
             const mc = e.getComponent(MeshComponent) as MeshComponent | undefined;
             if (mc && mc.mesh) {
@@ -62,13 +50,8 @@ export default class Model {
     }
 
     constructor() {
-        // Mesh components are created locally; uploading to the GPU is the responsibility of the caller (main)
     }
 
-
-    // Generic entity creation helper. Caller may provide an optional meshKey (a key into this.meshComponents)
-    // or an array of components to attach to the entity. If meshKey is provided, the corresponding
-    // MeshComponent is attached and ent.props.mesh is set so View can render it.
     addEntity(id: string, opts: {
         position?: Vector4,
         rotation?: Matrix4x4,
@@ -84,8 +67,6 @@ export default class Model {
         return ent;
     }
 
-    // Accept an externally-created Entity instance and register it with the model.
-    // This allows callers to construct an Entity, add components, then add it to the model.
     addExistingEntity(ent: Entity) {
         if (this.getEntityById(ent.id)) {
             console.warn(`Entity with id ${ent.id} already exists in Model. Skipping add.`);
@@ -96,11 +77,6 @@ export default class Model {
         return ent;
     }
 
-    // Mesh components are expected to be created and attached externally (e.g., in main).
-
-    // Returns objects that are within RENDER_DISTANCE (in chunks) from the primary camera ("main-camera").
-    // This keeps the view focused only on nearby chunks. If no camera exists, return all objects as fallback.
-    // Return SceneObject[] shaped view for compatibility with View.ts
     getObjects() {
         const camera = this.getCamera('main-camera');
     if (!camera) return Array.from(this.entities.values()).map(e => this.entityToSceneObject(e));
@@ -112,7 +88,6 @@ export default class Model {
         const cameraForward: Vector4 = camera.rotation.inverse().mul(Vector4.forward().neg());
 
         if (this.lastCameraChunkKey === camChunkKey && !CPU_SOFT_FRUSTUM_CULLING) {
-            // map cached ids back to SceneObject view
             return this.cachedVisibleObjects.map(id => this.entities.get(id)).filter(Boolean).map(e => this.entityToSceneObject(e!));
         }
         const collected = new Set<Entity>();
@@ -147,13 +122,11 @@ export default class Model {
             }
         }
 
-        // store cached visible ids; map back to SceneObject when returning
         this.cachedVisibleObjects = Array.from(collected).map(e => e.id);
         this.lastCameraChunkKey = camChunkKey;
         return Array.from(collected).map(e => this.entityToSceneObject(e));
     }
 
-    // Public API to move an object. Position is effectively immutable from outside except via this call.
     setObjectPosition(id: string, newPos: Vector4) {
     const ent = this.entities.get(id);
         if (!ent) return false;
@@ -192,7 +165,6 @@ export default class Model {
         return newInverse
     }
 
-    // --- chunk helpers ---
     private chunkCoordsFromPosition(pos: Vector4) {
         return {
             x: Math.floor(pos.x / CHUNK_SIZE),
@@ -236,14 +208,11 @@ export default class Model {
     }
 
     update(deltaMs: number) {
-        // Run entity components
     for (const e of this.entities.values()) {
-            // iterator result depends on Set vs Array; using values() for Set
             (e as Entity).update(deltaMs);
         }
     }
 
-    // Helper to convert Entity -> SceneObject shape for compatibility with View
     private entityToSceneObject(e: Entity): SceneObject {
         return {
             id: e.id,
@@ -254,7 +223,6 @@ export default class Model {
         };
     }
 
-    // Add a component instance to an entity by id
     addComponentToEntity(id: string, component: any) {
     const ent = this.entities.get(id);
         if (!ent) return false;
@@ -262,7 +230,6 @@ export default class Model {
         return true;
     }
 
-    // Helper to find an entity by id when entities are stored in a Set
     getEntityById(id: string) {
     return this.entities.get(id);
     }
