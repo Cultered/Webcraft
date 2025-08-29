@@ -34,9 +34,9 @@ if (!document.querySelector('#app')) {
 
     const sphereComponent = new MeshComponent(sphereMesh, true);
 
-    for (let i = 0; i < 100; i++) {
-        for (let j = 0; j < 100; j++) {
-            for (let k = 0; k < 100; k++) {
+    for (let i = 0; i < 30; i++) {
+        for (let j = 0; j < 30; j++) {
+            for (let k = 0; k < 30; k++) {
                 const id = `obj-${i}-${j}-${k}`;
                 const ent = new Entity(id, new Vector4(i * 2, j * 2, k * 2, 0), undefined, new Vector4(0.1, 0.1, 0.1, 1));
                 ent.addComponent(sphereComponent);

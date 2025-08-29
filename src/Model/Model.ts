@@ -17,11 +17,22 @@ export type SceneObject = {
     };
 };
 
-export const CHUNK_SIZE = 10;
-export let RENDER_DISTANCE = 8;
-export let LOD_DISTANCE = 5;
-export const CPU_SOFT_FRUSTUM_CULLING = true
-export const CPU_LOD = true
+export type Optimizations = {
+    CPU_CHUNKS: boolean
+    CHUNK_SIZE: number
+    RENDER_DISTANCE: number
+    LOD_DISTANCE: number
+    CPU_SOFT_FRUSTUM_CULLING: boolean
+    CPU_LOD: boolean
+};
+export const o11s: Optimizations = {
+    CPU_CHUNKS: false,
+    CHUNK_SIZE: 10,
+    RENDER_DISTANCE: 6,
+    LOD_DISTANCE: 3,
+    CPU_SOFT_FRUSTUM_CULLING: true,
+    CPU_LOD: true,
+}
 
 export default class Model {
     private entities: Map<string, Entity> = new Map();
@@ -32,7 +43,7 @@ export default class Model {
     public onSceneObjectsUpdated?: (objects: SceneObject[], updateVertices: boolean) => void;
 
     getMesh(id: string) {
-    for (const e of this.entities.values()) {
+        for (const e of this.entities.values()) {
             const mc = e.getComponent(MeshComponent) as MeshComponent | undefined;
             if (mc && mc.mesh && mc.mesh.id === id) return mc.mesh;
         }
@@ -40,7 +51,7 @@ export default class Model {
     }
     getMeshes(): { [id: string]: Mesh } {
         const out: { [id: string]: Mesh } = {};
-    for (const e of this.entities.values()) {
+        for (const e of this.entities.values()) {
             const mc = e.getComponent(MeshComponent) as MeshComponent | undefined;
             if (mc && mc.mesh) {
                 out[mc.mesh.id] = mc.mesh;
@@ -58,12 +69,12 @@ export default class Model {
         scale?: Vector4,
         components?: any[]
     } = {}) {
-    const ent = new Entity(id, opts.position, opts.rotation, opts.scale);
+        const ent = new Entity(id, opts.position, opts.rotation, opts.scale);
         if (opts.components) {
             for (const c of opts.components) ent.addComponent(c);
         }
-    this.entities.set(ent.id, ent);
-    this.assignToChunk(ent);
+        this.entities.set(ent.id, ent);
+        this.assignToChunk(ent);
         return ent;
     }
 
@@ -72,30 +83,30 @@ export default class Model {
             console.warn(`Entity with id ${ent.id} already exists in Model. Skipping add.`);
             return this.getEntityById(ent.id);
         }
-    this.entities.set(ent.id, ent);
+        this.entities.set(ent.id, ent);
         this.assignToChunk(ent);
         return ent;
     }
 
     getObjects() {
         const camera = this.getCamera('main-camera');
-    if (!camera) return Array.from(this.entities.values()).map(e => this.entityToSceneObject(e));
-
+        if (!camera) return Array.from(this.entities.values()).map(e => this.entityToSceneObject(e));
+        if (!o11s.CPU_CHUNKS) return Array.from(this.entities.values()).map(e => this.entityToSceneObject(e));
         const camPos = camera.position;
         const camChunk = this.chunkCoordsFromPosition(camPos);
         const camChunkKey = `${camChunk.x},${camChunk.y},${camChunk.z}`;
 
         const cameraForward: Vector4 = camera.rotation.inverse().mul(Vector4.forward().neg());
 
-        if (this.lastCameraChunkKey === camChunkKey && !CPU_SOFT_FRUSTUM_CULLING) {
+        if (this.lastCameraChunkKey === camChunkKey && !o11s.CPU_SOFT_FRUSTUM_CULLING) {
             return this.cachedVisibleObjects.map(id => this.entities.get(id)).filter(Boolean).map(e => this.entityToSceneObject(e!));
         }
         const collected = new Set<Entity>();
-        for (let dx = -RENDER_DISTANCE; dx <= RENDER_DISTANCE; dx++) {
-            for (let dy = -RENDER_DISTANCE; dy <= RENDER_DISTANCE; dy++) {
-                for (let dz = -RENDER_DISTANCE; dz <= RENDER_DISTANCE; dz++) {
-                    if (dx * dx + dy * dy + dz * dz > RENDER_DISTANCE * RENDER_DISTANCE) continue;
-                    if (CPU_SOFT_FRUSTUM_CULLING) {
+        for (let dx = -o11s.RENDER_DISTANCE; dx <= o11s.RENDER_DISTANCE; dx++) {
+            for (let dy = -o11s.RENDER_DISTANCE; dy <= o11s.RENDER_DISTANCE; dy++) {
+                for (let dz = -o11s.RENDER_DISTANCE; dz <= o11s.RENDER_DISTANCE; dz++) {
+                    if (dx * dx + dy * dy + dz * dz > o11s.RENDER_DISTANCE * o11s.RENDER_DISTANCE) continue;
+                    if (o11s.CPU_SOFT_FRUSTUM_CULLING) {
                         if (cameraForward.mul(new Vector4(dx, dy, dz, 0)) < -1) continue;
                     }
                     const key = `${camChunk.x + dx},${camChunk.y + dy},${camChunk.z + dz}`;
@@ -103,9 +114,9 @@ export default class Model {
                     if (ids) {
                         ids.forEach(id => {
                             const ent = this.getEntityById(id);
-                            if (CPU_LOD) {
+                            if (o11s.CPU_LOD) {
                                 const mc = ent && ent.getComponent(MeshComponent) as MeshComponent;
-                                if (dx * dx + dy * dy + dz * dz > LOD_DISTANCE * LOD_DISTANCE) {
+                                if (dx * dx + dy * dy + dz * dz > o11s.LOD_DISTANCE * o11s.LOD_DISTANCE) {
                                     if (ent && mc) {
                                         mc.LODReduce(ent);
                                     }
@@ -128,7 +139,7 @@ export default class Model {
     }
 
     setObjectPosition(id: string, newPos: Vector4) {
-    const ent = this.entities.get(id);
+        const ent = this.entities.get(id);
         if (!ent) return false;
         const oldChunk = ent.props.chunkKey;
         ent.position = newPos;
@@ -167,9 +178,9 @@ export default class Model {
 
     private chunkCoordsFromPosition(pos: Vector4) {
         return {
-            x: Math.floor(pos.x / CHUNK_SIZE),
-            y: Math.floor(pos.y / CHUNK_SIZE),
-            z: Math.floor(pos.z / CHUNK_SIZE),
+            x: Math.floor(pos.x / o11s.CHUNK_SIZE),
+            y: Math.floor(pos.y / o11s.CHUNK_SIZE),
+            z: Math.floor(pos.z / o11s.CHUNK_SIZE),
         };
     }
 
@@ -208,7 +219,7 @@ export default class Model {
     }
 
     update(deltaMs: number) {
-    for (const e of this.entities.values()) {
+        for (const e of this.entities.values()) {
             (e as Entity).update(deltaMs);
         }
     }
@@ -224,13 +235,13 @@ export default class Model {
     }
 
     addComponentToEntity(id: string, component: any) {
-    const ent = this.entities.get(id);
+        const ent = this.entities.get(id);
         if (!ent) return false;
         ent.addComponent(component);
         return true;
     }
 
     getEntityById(id: string) {
-    return this.entities.get(id);
+        return this.entities.get(id);
     }
 }
