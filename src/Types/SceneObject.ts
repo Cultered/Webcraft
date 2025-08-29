@@ -1,5 +1,5 @@
-import { Vector4 } from '../misc/Vector4';
-import { Matrix4x4 } from '../misc/Matrix4x4';
+import type { Vector4 } from '../misc/Vector4';
+import type { Matrix4x4 } from '../misc/Matrix4x4';
 export type SceneObject = {
     id: string;
     position: Vector4;

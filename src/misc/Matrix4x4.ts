@@ -1,251 +1,265 @@
-import { Vector4 } from './Vector4';
-import { radians } from './misc';
-export class Matrix4x4 {
-    vec1: Vector4
-    vec2: Vector4
-    vec3: Vector4
-    vec4: Vector4
-    constructor(vec1: Vector4, vec2: Vector4, vec3: Vector4, vec4: Vector4) {// columns
-        this.vec1 = vec1; // vec4<f32>
-        this.vec2 = vec2; // vec4<f32>
-        this.vec3 = vec3; // vec4<f32>
-        this.vec4 = vec4; // vec4<f32>
+import type { Vector4 } from "./Vector4";
+
+export type Matrix4x4 = Float32Array
+export function mat4(
+  m00 = 1, m01 = 0, m02 = 0, m03 = 0,
+  m10 = 0, m11 = 1, m12 = 0, m13 = 0,
+  m20 = 0, m21 = 0, m22 = 1, m23 = 0,
+  m30 = 0, m31 = 0, m32 = 0, m33 = 1
+): Matrix4x4 {
+  return new Float32Array([
+    m00, m01, m02, m03,
+    m10, m11, m12, m13,
+    m20, m21, m22, m23,
+    m30, m31, m32, m33]);
+}
+export function mat4Inverse(out: Matrix4x4, m: Matrix4x4): Matrix4x4 {
+  if(out.length !== 16) {
+    throw new Error("mat4x4: out length must be 16");
+  }
+  const inv = new Float32Array(16);
+
+  inv[0] = m[5] * m[10] * m[15] -
+    m[5] * m[11] * m[14] -
+    m[9] * m[6] * m[15] +
+    m[9] * m[7] * m[14] +
+    m[13] * m[6] * m[11] -
+    m[13] * m[7] * m[10];
+
+  inv[4] = -m[4] * m[10] * m[15] +
+    m[4] * m[11] * m[14] +
+    m[8] * m[6] * m[15] -
+    m[8] * m[7] * m[14] -
+    m[12] * m[6] * m[11] +
+    m[12] * m[7] * m[10];
+
+  inv[8] = m[4] * m[9] * m[15] -
+    m[4] * m[11] * m[13] -
+    m[8] * m[5] * m[15] +
+    m[8] * m[7] * m[13] +
+    m[12] * m[5] * m[11] -
+    m[12] * m[7] * m[9];
+
+  inv[12] = -m[4] * m[9] * m[14] +
+    m[4] * m[10] * m[13] +
+    m[8] * m[5] * m[14] -
+    m[8] * m[6] * m[13] -
+    m[12] * m[5] * m[10] +
+    m[12] * m[6] * m[9];
+
+  inv[1] = -m[1] * m[10] * m[15] +
+    m[1] * m[11] * m[14] +
+    m[9] * m[2] * m[15] -
+    m[9] * m[3] * m[14] -
+    m[13] * m[2] * m[11] +
+    m[13] * m[3] * m[10];
+
+  inv[5] = m[0] * m[10] * m[15] -
+    m[0] * m[11] * m[14] -
+    m[8] * m[2] * m[15] +
+    m[8] * m[3] * m[14] +
+    m[12] * m[2] * m[11] -
+    m[12] * m[3] * m[10];
+
+  inv[9] = -m[0] * m[9] * m[15] +
+    m[0] * m[11] * m[13] +
+    m[8] * m[1] * m[15] -
+    m[8] * m[3] * m[13] -
+    m[12] * m[1] * m[11] +
+    m[12] * m[3] * m[9];
+
+  inv[13] = m[0] * m[9] * m[14] -
+    m[0] * m[10] * m[13] -
+    m[8] * m[1] * m[14] +
+    m[8] * m[2] * m[13] +
+    m[12] * m[1] * m[10] -
+    m[12] * m[2] * m[9];
+
+  inv[2] = m[1] * m[6] * m[15] -
+    m[1] * m[7] * m[14] -
+    m[5] * m[2] * m[15] +
+    m[5] * m[3] * m[14] +
+    m[13] * m[2] * m[7] -
+    m[13] * m[3] * m[6];
+
+  inv[6] = -m[0] * m[6] * m[15] +
+    m[0] * m[7] * m[14] +
+    m[4] * m[2] * m[15] -
+    m[4] * m[3] * m[14] -
+    m[12] * m[2] * m[7] +
+    m[12] * m[3] * m[6];
+
+  inv[10] = m[0] * m[5] * m[15] -
+    m[0] * m[7] * m[13] -
+    m[4] * m[1] * m[15] +
+    m[4] * m[3] * m[13] +
+    m[12] * m[1] * m[7] -
+    m[12] * m[3] * m[5];
+
+  inv[14] = -m[0] * m[5] * m[14] +
+    m[0] * m[6] * m[13] +
+    m[4] * m[1] * m[14] -
+    m[4] * m[2] * m[13] -
+    m[12] * m[1] * m[6] +
+    m[12] * m[2] * m[5];
+
+  inv[3] = -m[1] * m[6] * m[11] +
+    m[1] * m[7] * m[10] +
+    m[5] * m[2] * m[11] -
+    m[5] * m[3] * m[10] -
+    m[9] * m[2] * m[7] +
+    m[9] * m[3] * m[6];
+
+  inv[7] = m[0] * m[6] * m[11] -
+    m[0] * m[7] * m[10] -
+    m[4] * m[2] * m[11] +
+    m[4] * m[3] * m[10] +
+    m[8] * m[2] * m[7] -
+    m[8] * m[3] * m[6];
+
+  inv[11] = -m[0] * m[5] * m[11] +
+    m[0] * m[7] * m[9] +
+    m[4] * m[1] * m[11] -
+    m[4] * m[3] * m[9] -
+    m[8] * m[1] * m[7] +
+    m[8] * m[3] * m[5];
+
+  inv[15] = m[0] * m[5] * m[10] -
+    m[0] * m[6] * m[9] -
+    m[4] * m[1] * m[10] +
+    m[4] * m[2] * m[9] +
+    m[8] * m[1] * m[6] -
+    m[8] * m[2] * m[5];
+
+  let det = m[0] * inv[0] + m[1] * inv[4] + m[2] * inv[8] + m[3] * inv[12];
+
+  if (det === 0) {
+    throw new Error("Matrix determenant is 0")
+  }
+
+  det = 1.0 / det;
+  for (let i = 0; i < 16; i++) {
+    out[i] = inv[i] * det;
+  }
+
+  return out;
+}
+
+export function mat4Identity(): Matrix4x4 {
+  return mat4();
+}
+
+export function mat4MulVec4(out: Vector4, m: Matrix4x4, v: Float32Array): Float32Array {
+  if(out.length !== 4) {
+    throw new Error("vec4Scale: out length must be 4");
+  }
+  if(out === v ||out === m) {
+    throw new Error("Unsafe : out must not be the same as m or v");
+  }
+  out[0] = m[0] * v[0] + m[1] * v[1] + m[2] * v[2] + m[3] * v[3];
+  out[1] = m[4] * v[0] + m[5] * v[1] + m[6] * v[2] + m[7] * v[3];
+  out[2] = m[8] * v[0] + m[9] * v[1] + m[10] * v[2] + m[11] * v[3];
+  out[3] = m[12] * v[0] + m[13] * v[1] + m[14] * v[2] + m[15] * v[3];
+  return out;
+}
+
+export function mat4Mul(out: Matrix4x4, a: Matrix4x4, b: Matrix4x4): Matrix4x4 {
+  if(out === a ||out === b) {
+    throw new Error("Unsafe : out must not be the same as m or v");
+  }
+  for (let i = 0; i < 4; i++) {
+    for (let j = 0; j < 4; j++) {
+      out[i + j * 4] =
+        a[0 + j * 4] * b[i + 0] +
+        a[1 + j * 4] * b[i + 4] +
+        a[2 + j * 4] * b[i + 8] +
+        a[3 + j * 4] * b[i + 12];
     }
-    static identity(): Matrix4x4 {
-        return new Matrix4x4(
-            new Vector4(1, 0, 0, 0),
-            new Vector4(0, 1, 0, 0),
-            new Vector4(0, 0, 1, 0),
-            new Vector4(0, 0, 0, 1),
-        )
-    }
-    mul(other: Vector4): Vector4 {
-        return new Vector4(
-            this.vec1.x * other.x + this.vec2.x * other.y + this.vec3.x * other.z + this.vec4.x * other.w,
-            this.vec1.y * other.x + this.vec2.y * other.y + this.vec3.y * other.z + this.vec4.y * other.w,
-            this.vec1.z * other.x + this.vec2.z * other.y + this.vec3.z * other.z + this.vec4.z * other.w,
-            this.vec1.w * other.x + this.vec2.w * other.y + this.vec3.w * other.z + this.vec4.w * other.w
-        );
-    }
-    mulMatrix(other: Matrix4x4): Matrix4x4 {
-        return new Matrix4x4(
-            this.mul(other.vec1),
-            this.mul(other.vec2),
-            this.mul(other.vec3),
-            this.mul(other.vec4)
-        );
-    }
-    static translationMatrix(vec: Vector4): Matrix4x4 {
-        /**Create a translate matrix, w component should be 1, otherwise it will be converted to 1 implicitly */
-        vec = new Vector4(vec.x, vec.y, vec.z, 1); // normalize w to 1
-        return new Matrix4x4(
-            new Vector4(1, 0, 0, 0),
-            new Vector4(0, 1, 0, 0),
-            new Vector4(0, 0, 1, 0),
-            new Vector4(vec.x, vec.y, vec.z, vec.w)
-        )
-    }
-    static rotationalMatrix(angle: Vector4): Matrix4x4 {
-        /**Create a rotation matrix around x,y,z; w is ignored */
-        let cosX = Math.cos(angle.x);
-        let sinX = Math.sin(angle.x);
-        let cosY = Math.cos(angle.y);
-        let sinY = Math.sin(angle.y);
-        let cosZ = Math.cos(angle.z);
-        let sinZ = Math.sin(angle.z);
+  }
+  return out;
+}
 
-        // Rotation matrix around X axis
-        const rotX = new Matrix4x4(
-            new Vector4(1, 0, 0, 0),
-            new Vector4(0, cosX, -sinX, 0),
-            new Vector4(0, sinX, cosX, 0),
-            new Vector4(0, 0, 0, 1)
-        );
-        // Rotation matrix around Y axis
-        const rotY = new Matrix4x4(
-            new Vector4(cosY, 0, sinY, 0),
-            new Vector4(0, 1, 0, 0),
-            new Vector4(-sinY, 0, cosY, 0),
-            new Vector4(0, 0, 0, 1)
-        );
-        // Rotation matrix around Z axis
-        const rotZ = new Matrix4x4(
-            new Vector4(cosZ, -sinZ, 0, 0),
-            new Vector4(sinZ, cosZ, 0, 0),
-            new Vector4(0, 0, 1, 0),
-            new Vector4(0, 0, 0, 1)
-        );
-        // Combine rotations: Z * Y * X (common convention)
-        return rotZ.mulMatrix(rotY).mulMatrix(rotX);
-    }
-    static scaleMatrix(vec: Vector4): Matrix4x4 {
-        if (vec.w != 1) {
-            console.warn("You are scaling with w, probably not something you want, ", vec)
-        }
-        return new Matrix4x4(
-            new Vector4(vec.x, 0, 0, 0),
-            new Vector4(0, vec.y, 0, 0),
-            new Vector4(0, 0, vec.z, 0),
-            new Vector4(0, 0, 0, vec.w)
-        );
-    }
-    static projectionMatrix(fovY: number, aspect: number, near: number, far: number): Matrix4x4 {
-        /**WGSL projection matrix (dont use with GLSL etc) */
-        let f = 1.0 / Math.tan(radians(fovY) * 0.5);
-        let nf = 1.0 / (near - far);
-        let proj = new Matrix4x4(
-            new Vector4(f / aspect, 0.0, 0.0, 0.0),
-            new Vector4(0.0, f, 0.0, 0.0),
-            new Vector4(0.0, 0.0, (far + near) * nf, -1.0),
-            new Vector4(0.0, 0.0, 2.0 * far * near * nf, 0.0)
-        );
-        return proj;
-    }
-    toFloat32Array(): Float32Array {
-        return new Float32Array([
-            this.vec1.x, this.vec1.y, this.vec1.z, this.vec1.w,
-            this.vec2.x, this.vec2.y, this.vec2.z, this.vec2.w,
-            this.vec3.x, this.vec3.y, this.vec3.z, this.vec3.w,
-            this.vec4.x, this.vec4.y, this.vec4.z, this.vec4.w
-        ]);
-    }
+export function mat4Translation(tx: number, ty: number, tz: number): Matrix4x4 {
+  return mat4(
+    1, 0, 0, tx,
+    0, 1, 0, ty,
+    0, 0, 1, tz,
+    0, 0, 0, 1
+  );
+}
 
-    inverse(): Matrix4x4 {
-        // Fast inversion for a 4x4 matrix stored in column-major order (this.toFloat32Array())
-        const m = this.toFloat32Array();
-        const inv = new Float32Array(16);
+export function mat4Scale(sx: number, sy: number, sz: number): Matrix4x4 {
+  return mat4(
+    sx, 0, 0, 0,
+    0, sy, 0, 0,
+    0, 0, sz, 0,
+    0, 0, 0, 1
+  );
+}
 
-        inv[0] = m[5] * m[10] * m[15] -
-            m[5] * m[11] * m[14] -
-            m[9] * m[6] * m[15] +
-            m[9] * m[7] * m[14] +
-            m[13] * m[6] * m[11] -
-            m[13] * m[7] * m[10];
+export function mat4Rotation(x: number, y: number, z: number): Matrix4x4 {
+  const cx = Math.cos(x), sx = Math.sin(x);
+  const cy = Math.cos(y), sy = Math.sin(y);
+  const cz = Math.cos(z), sz = Math.sin(z);
 
-        inv[4] = -m[4] * m[10] * m[15] +
-            m[4] * m[11] * m[14] +
-            m[8] * m[6] * m[15] -
-            m[8] * m[7] * m[14] -
-            m[12] * m[6] * m[11] +
-            m[12] * m[7] * m[10];
+  const rotX = mat4(
+    1, 0, 0, 0,
+    0, cx, -sx, 0,
+    0, sx, cx, 0,
+    0, 0, 0, 1
+  );
 
-        inv[8] = m[4] * m[9] * m[15] -
-            m[4] * m[11] * m[13] -
-            m[8] * m[5] * m[15] +
-            m[8] * m[7] * m[13] +
-            m[12] * m[5] * m[11] -
-            m[12] * m[7] * m[9];
+  const rotY = mat4(
+    cy, 0, sy, 0,
+    0, 1, 0, 0,
+    -sy, 0, cy, 0,
+    0, 0, 0, 1
+  );
 
-        inv[12] = -m[4] * m[9] * m[14] +
-            m[4] * m[10] * m[13] +
-            m[8] * m[5] * m[14] -
-            m[8] * m[6] * m[13] -
-            m[12] * m[5] * m[10] +
-            m[12] * m[6] * m[9];
+  const rotZ = mat4(
+    cz, -sz, 0, 0,
+    sz, cz, 0, 0,
+    0, 0, 1, 0,
+    0, 0, 0, 1
+  );
 
-        inv[1] = -m[1] * m[10] * m[15] +
-            m[1] * m[11] * m[14] +
-            m[9] * m[2] * m[15] -
-            m[9] * m[3] * m[14] -
-            m[13] * m[2] * m[11] +
-            m[13] * m[3] * m[10];
+  const tmp = mat4();
+  const out = mat4();
+  mat4Mul(tmp, rotZ, rotY);
+  mat4Mul(out, tmp, rotX);
+  return out;
+}
 
-        inv[5] = m[0] * m[10] * m[15] -
-            m[0] * m[11] * m[14] -
-            m[8] * m[2] * m[15] +
-            m[8] * m[3] * m[14] +
-            m[12] * m[2] * m[11] -
-            m[12] * m[3] * m[10];
+export function mat4Transpose(m: Matrix4x4): Matrix4x4 {
+  return new Float32Array([
+    m[0], m[4], m[8],  m[12],
+    m[1], m[5], m[9],  m[13],
+    m[2], m[6], m[10], m[14],
+    m[3], m[7], m[11], m[15],
+  ]);
+}
 
-        inv[9] = -m[0] * m[9] * m[15] +
-            m[0] * m[11] * m[13] +
-            m[8] * m[1] * m[15] -
-            m[8] * m[3] * m[13] -
-            m[12] * m[1] * m[11] +
-            m[12] * m[3] * m[9];
+export function mat4TRS(
+  translation: number[],
+  rotation: Matrix4x4,
+  scale: number[]
+): Matrix4x4 {
+  const out = new Float32Array(16);
+  const t = mat4Translation(translation[0], translation[1], translation[2]);
+  const s = mat4Scale(scale[0], scale[1], scale[2]);
+  const tmp = mat4();
+  mat4Mul(tmp, rotation, s);
+  mat4Mul(out, t, tmp);
+  return out;
+}
 
-        inv[13] = m[0] * m[9] * m[14] -
-            m[0] * m[10] * m[13] -
-            m[8] * m[1] * m[14] +
-            m[8] * m[2] * m[13] +
-            m[12] * m[1] * m[10] -
-            m[12] * m[2] * m[9];
-
-        inv[2] = m[1] * m[6] * m[15] -
-            m[1] * m[7] * m[14] -
-            m[5] * m[2] * m[15] +
-            m[5] * m[3] * m[14] +
-            m[13] * m[2] * m[7] -
-            m[13] * m[3] * m[6];
-
-        inv[6] = -m[0] * m[6] * m[15] +
-            m[0] * m[7] * m[14] +
-            m[4] * m[2] * m[15] -
-            m[4] * m[3] * m[14] -
-            m[12] * m[2] * m[7] +
-            m[12] * m[3] * m[6];
-
-        inv[10] = m[0] * m[5] * m[15] -
-            m[0] * m[7] * m[13] -
-            m[4] * m[1] * m[15] +
-            m[4] * m[3] * m[13] +
-            m[12] * m[1] * m[7] -
-            m[12] * m[3] * m[5];
-
-        inv[14] = -m[0] * m[5] * m[14] +
-            m[0] * m[6] * m[13] +
-            m[4] * m[1] * m[14] -
-            m[4] * m[2] * m[13] -
-            m[12] * m[1] * m[6] +
-            m[12] * m[2] * m[5];
-
-        inv[3] = -m[1] * m[6] * m[11] +
-            m[1] * m[7] * m[10] +
-            m[5] * m[2] * m[11] -
-            m[5] * m[3] * m[10] -
-            m[9] * m[2] * m[7] +
-            m[9] * m[3] * m[6];
-
-        inv[7] = m[0] * m[6] * m[11] -
-            m[0] * m[7] * m[10] -
-            m[4] * m[2] * m[11] +
-            m[4] * m[3] * m[10] +
-            m[8] * m[2] * m[7] -
-            m[8] * m[3] * m[6];
-
-        inv[11] = -m[0] * m[5] * m[11] +
-            m[0] * m[7] * m[9] +
-            m[4] * m[1] * m[11] -
-            m[4] * m[3] * m[9] -
-            m[8] * m[1] * m[7] +
-            m[8] * m[3] * m[5];
-
-        inv[15] = m[0] * m[5] * m[10] -
-            m[0] * m[6] * m[9] -
-            m[4] * m[1] * m[10] +
-            m[4] * m[2] * m[9] +
-            m[8] * m[1] * m[6] -
-            m[8] * m[2] * m[5];
-
-        let det = m[0] * inv[0] + m[1] * inv[4] + m[2] * inv[8] + m[3] * inv[12];
-
-        if (det === 0) {
-            console.warn('Matrix4x4.inverse: matrix is singular, returning identity');
-            return Matrix4x4.identity();
-        }
-
-        det = 1.0 / det;
-        for (let i = 0; i < 16; i++) {
-            inv[i] = inv[i] * det;
-        }
-
-        // Construct Matrix4x4 from column-major inv[]
-        return new Matrix4x4(
-            new Vector4(inv[0], inv[1], inv[2], inv[3]),
-            new Vector4(inv[4], inv[5], inv[6], inv[7]),
-            new Vector4(inv[8], inv[9], inv[10], inv[11]),
-            new Vector4(inv[12], inv[13], inv[14], inv[15])
-        );
-    }
-
+export function mat4Projection(fovY: number, aspect: number, near: number, far: number) {
+  const f = 1 / Math.tan(fovY * 0.5);
+  const nf = 1 / (near - far);
+  return mat4(
+    f / aspect, 0, 0, 0,
+    0, f, 0, 0,
+    0, 0, (far+near) * nf, 2*far * near * nf,
+    0, 0, -1, 0
+  );
 }

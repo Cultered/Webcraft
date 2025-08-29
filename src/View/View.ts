@@ -1,6 +1,7 @@
 import { renderer } from './shaders/default-wgsl-renderer';
-import { Matrix4x4 } from '../misc/Matrix4x4';
-import { Vector4 } from '../misc/Vector4';
+import type { Matrix4x4 } from '../misc/Matrix4x4';
+import type { Vector4 } from '../misc/Vector4';
+import * as M from '../misc/Matrix4x4';
 import type { SceneObject } from '../Types/SceneObject';
 import type { Mesh } from '../Types/Mesh';
 import { ShowWebGPUInstructions } from '../misc/misc';
@@ -28,9 +29,9 @@ class View {
     private lastCameraKey?: string;
     private camera: SceneObject = {
         id: 'viewCamera',
-        position: new Vector4(0, 0, 0, 1),
-        rotation: Matrix4x4.identity(),
-        scale: new Vector4(1, 1, 1, 1),
+        position: new Float32Array([0, 0, 0, 1]) as Vector4,
+        rotation: M.mat4Identity(),
+        scale: new Float32Array([1, 1, 1, 1]) as Vector4,
         props: {}
     };
 
@@ -78,8 +79,8 @@ class View {
                     usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST
                 });
 
-                const initialProj = Matrix4x4.projectionMatrix(this.fov, (canvas.width || window.innerWidth) / (canvas.height || window.innerHeight), this.near, this.far);
-                this.device.queue.writeBuffer(this.projectionBuffer, 0, initialProj.toFloat32Array().buffer);
+                const initialProj = M.mat4Projection(this.fov, (canvas.width || window.innerWidth) / (canvas.height || window.innerHeight), this.near, this.far);
+                this.device.queue.writeBuffer(this.projectionBuffer, 0, (initialProj).buffer);
 
                 const bindGroupLayout = device.createBindGroupLayout({
                     entries: [
@@ -116,8 +117,8 @@ class View {
                     if (this.depthTexture) this.depthTexture.destroy();
                     this.depthTexture = this.device!.createTexture({ size: { width: this.canvas.width, height: this.canvas.height, depthOrArrayLayers: 1 }, sampleCount, format: 'depth24plus', usage: GPUTextureUsage.RENDER_ATTACHMENT });
                     if (this.projectionBuffer) {
-                        const proj = Matrix4x4.projectionMatrix(this.fov, this.canvas.width / this.canvas.height, this.near, this.far);
-                        this.device.queue.writeBuffer(this.projectionBuffer, 0, proj.toFloat32Array().buffer);
+                        const proj = M.mat4Projection(this.fov, this.canvas.width / this.canvas.height, this.near, this.far);
+                        this.device.queue.writeBuffer(this.projectionBuffer, 0, M.mat4Transpose(proj).buffer);
                     }
                 };
 
@@ -151,7 +152,7 @@ class View {
         this.updateObjectStorageBufferPartial(objects);
     }
     registerCamera(camera: SceneObject) {
-        const camKey = `${camera.position.x},${camera.position.y},${camera.position.z}|${JSON.stringify(camera.rotation)}`;
+        const camKey = `${camera.position[0]},${camera.position[1]},${camera.position[2]}|${JSON.stringify(camera.rotation)}`;
         if (camKey === this.lastCameraKey) {
             this.camera = camera;
             return;
@@ -160,9 +161,8 @@ class View {
         this.lastCameraKey = camKey;
 
         if (this.device && this.cameraBuffer) {
-            const negPos = new Vector4(-camera.position.x, -camera.position.y, -camera.position.z, 0);
-            const camTransform = camera.rotation.mulMatrix(Matrix4x4.translationMatrix(negPos));
-            this.device.queue.writeBuffer(this.cameraBuffer, 0, camTransform.toFloat32Array().buffer);
+            const camTransform = M.mat4Mul(new Float32Array(16),camera.rotation,M.mat4Translation(-camera.position[0],-camera.position[1],-camera.position[2]));
+            this.device.queue.writeBuffer(this.cameraBuffer, 0, M.mat4Transpose(camTransform).buffer);
         }
     }
 
@@ -204,13 +204,18 @@ class View {
         const allObjectMatricesBuffer = new Float32Array(objectCount * 16);
         for (let i = 0; i < objects.length; i++) {
             const obj = objects[i];
-            const matrix = Matrix4x4.translationMatrix(obj.position).mulMatrix(obj.rotation).mulMatrix(Matrix4x4.scaleMatrix(obj.scale));
-            allObjectMatricesBuffer.set(matrix.toFloat32Array(), i * 16);
+            const translation = [obj.position[0], obj.position[1], obj.position[2]];
+            const scale = [obj.scale[0], obj.scale[1], obj.scale[2]];
+            const matrix = M.mat4Transpose(M.mat4TRS(translation,obj.rotation,scale));
+            allObjectMatricesBuffer.set(matrix, i * 16);
         }
-        this.device.queue.writeBuffer(this.objectStorageBuffer!, 0, allObjectMatricesBuffer.buffer, 0, objectCount * 16 * 4);
+        this.device.queue.writeBuffer(this.objectStorageBuffer!, 0, allObjectMatricesBuffer .buffer, 0, objectCount * 16 * 4);
     }
     render(): void {
+        if(this.WebGPUBackend){
         this.renderWGPU();
+
+        }
     }
 
     renderWGPU(): void {
@@ -268,7 +273,7 @@ class View {
 
             if (this.debugEl) {
                 this.debugEl.innerText += `WebGPU ready\nObjects: ${objIndex}\nBuffers: ${this.objectBuffers.size}`;
-                this.debugEl.innerText += `\nCamerar: x${this.camera.position.x} y${this.camera.position.y} z${this.camera.position.z}`;
+                this.debugEl.innerText += `\nCamerar: x${this.camera.position[0].toFixed(2)} y${this.camera.position[1].toFixed(2)} z${this.camera.position[2].toFixed(2)}`;
             }
         } catch (e) {
             console.error('Render error:', e);

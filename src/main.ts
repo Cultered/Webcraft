@@ -3,10 +3,10 @@ import Model from './Model/Model';
 import MeshComponent from './Model/Components/MeshComponent';
 import { Entity } from './Model/Entity';
 import { generateSphereMesh, generateCubeMesh, LOD_MESH } from './Types/Mesh';
-import { Vector4 } from './misc/Vector4';
+import type { Vector4 } from './misc/Vector4';
 import { setupDebugElement } from './misc/setupDebugElement';
 import { setUpCanvas } from './misc/setUpCanvas';
-import { Matrix4x4 } from './misc/Matrix4x4';
+import * as M from './misc/Matrix4x4';
 import Controller from './Controller/Controller';
 import Rotator from './Model/Components/Rotator';
 
@@ -25,7 +25,7 @@ if (!document.querySelector('#app')) {
     const debugEl = setupDebugElement()
     view.setDebugElement(debugEl);
 
-    model.addCamera('main-camera', new Vector4(0, 0, 0, 0), Matrix4x4.rotationalMatrix(new Vector4(0, 3, 0, 0)));
+    model.addCamera('main-camera', new Float32Array([10, 10, 10, 0]) as Vector4, M.mat4Rotation(0, 0, 0));
     const sphereMesh = { id: 'builtin-sphere', ...generateSphereMesh(3, 1) };
     const cubeMesh = { id: 'builtin-cube', ...generateCubeMesh(1) };
     view.uploadMeshToGPU(sphereMesh.id, sphereMesh.vertices, sphereMesh.indices);
@@ -34,11 +34,11 @@ if (!document.querySelector('#app')) {
 
     const sphereComponent = new MeshComponent(sphereMesh, true);
 
-    for (let i = 0; i < 30; i++) {
-        for (let j = 0; j < 30; j++) {
-            for (let k = 0; k < 30; k++) {
+    for (let i = 0; i < 50; i++) {
+        for (let j = 0; j < 50; j++) {
+            for (let k = 0; k < 50; k++) {
                 const id = `obj-${i}-${j}-${k}`;
-                const ent = new Entity(id, new Vector4(i * 2, j * 2, k * 2, 0), undefined, new Vector4(0.1, 0.1, 0.1, 1));
+                const ent = new Entity(id, new Float32Array([i * 2, j * 2, k * 2, 0]) as Vector4, undefined, new Float32Array([0.1, 0.1, 0.1, 1]) as Vector4);
                 ent.addComponent(sphereComponent);
                 model.addExistingEntity(ent);
             }
@@ -62,7 +62,9 @@ if (!document.querySelector('#app')) {
         times['registerSceneObjects'] = performance.now() - t0;
 
         const t1 = performance.now();
-        view.registerCamera(model.getCamera("main-camera"));
+        const mainCam = model.getCamera("main-camera");
+        if (!mainCam) {console.error("No main camera");return}
+        view.registerCamera(mainCam);
         times['registerCamera'] = performance.now() - t1;
 
         const t2 = performance.now();

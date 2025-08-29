@@ -1,5 +1,7 @@
-import { Vector4 } from '../misc/Vector4';
-import { Matrix4x4 } from '../misc/Matrix4x4';
+import type { Vector4 } from '../misc/Vector4';
+import type { Matrix4x4 } from '../misc/Matrix4x4';
+import * as V from '../misc/Vector4';
+import * as M from '../misc/Matrix4x4';
 import { Entity } from './Entity';
 import MeshComponent from './Components/MeshComponent';
 import type { Mesh } from '../Types/Mesh';
@@ -80,7 +82,9 @@ export default class Model {
         const camChunk = this.chunkCoordsFromPosition(camPos);
         const camChunkKey = `${camChunk.x},${camChunk.y},${camChunk.z}`;
 
-        const cameraForward: Vector4 = camera.rotation.inverse().mul(Vector4.forward().neg());
+        let camRotInv:Matrix4x4 = M.mat4Inverse(new Float32Array(16), camera.rotation)
+
+        let cameraForward = M.mat4MulVec4(new Float32Array(4),camRotInv,V.vec4Neg(V.vec4(),V.forward()));
 
         if (this.lastCameraChunkKey === camChunkKey && !o11s.CPU_SOFT_FRUSTUM_CULLING) {
             return this.cachedVisibleObjects.map(id => this.entities.get(id)).filter(Boolean).map(e => this.entityToSceneObject(e!));
@@ -91,7 +95,7 @@ export default class Model {
                 for (let dz = -o11s.RENDER_DISTANCE; dz <= o11s.RENDER_DISTANCE; dz++) {
                     if (dx * dx + dy * dy + dz * dz > o11s.RENDER_DISTANCE * o11s.RENDER_DISTANCE) continue;
                     if (o11s.CPU_SOFT_FRUSTUM_CULLING) {
-                        if (cameraForward.mul(new Vector4(dx, dy, dz, 0)) < -1) continue;
+                        if (V.vec4Dot(cameraForward, new Float32Array([dx, dy, dz, 0]) as Vector4) < -1) continue;
                     }
                     const key = `${camChunk.x + dx},${camChunk.y + dy},${camChunk.z + dz}`;
                     const ids = this.chunks.get(key);
@@ -132,28 +136,20 @@ export default class Model {
     }
 
     addCamera(id: string, position?: Vector4, rotation?: Matrix4x4) {
-        const cam = new Entity(id, position ?? new Vector4(0, 0, 4, 1), rotation ?? Matrix4x4.identity(), new Vector4(1, 1, 1, 1));
+        const cam = new Entity(id, position ?? new Float32Array([0, 0, 0, 0]) as Vector4, rotation ?? M.mat4Identity(), new Float32Array([1, 1, 1, 1]) as Vector4);
         this.cameras.push(cam);
     }
 
-    updateCamera(id: string, position: Vector4, rotation: Matrix4x4) {
-        const camera = this.cameras.find(cam => cam.id === id);
-        if (camera) {
-            camera.position = position;
-            camera.rotation = rotation;
-        } else {
-            console.warn(`Camera with id ${id} not found.`);
-        }
-    }
 
-    getCamera(id: string): Entity {
-        return this.cameras.find(camera => camera.id === id) || new Entity('default-camera', new Vector4(0, 0, 4, 1), Matrix4x4.identity(), new Vector4(1, 1, 1, 1));
+    getCamera(id: string): Entity | undefined {
+        return this.cameras.find(camera => camera.id === id);
     }
 
     requestInverseRotation(obj: SceneObject): Matrix4x4 {
         let newInverse = obj.props.inverseRotation
         if (obj.props.updateInverseRotation || !newInverse) {
-            newInverse = obj.rotation.inverse()
+            newInverse = M.mat4Inverse(new Float32Array(16),obj.rotation)
+            console.log("Computed new inverse rotation for ",obj.id,newInverse)
             obj.props.inverseRotation = newInverse
             obj.props.updateInverseRotation = false
         }
@@ -162,9 +158,9 @@ export default class Model {
 
     private chunkCoordsFromPosition(pos: Vector4) {
         return {
-            x: Math.floor(pos.x / o11s.CHUNK_SIZE),
-            y: Math.floor(pos.y / o11s.CHUNK_SIZE),
-            z: Math.floor(pos.z / o11s.CHUNK_SIZE),
+            x: Math.floor(pos[0] / o11s.CHUNK_SIZE),
+            y: Math.floor(pos[1] / o11s.CHUNK_SIZE),
+            z: Math.floor(pos[2] / o11s.CHUNK_SIZE),
         };
     }
 

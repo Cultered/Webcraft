@@ -1,6 +1,6 @@
 import Model from '../Model/Model';
-import { Matrix4x4 } from '../misc/Matrix4x4';
-import { Vector4 } from '../misc/Vector4';
+import * as V from '../misc/Vector4';
+import * as M from '../misc/Matrix4x4';
 
 type RenderFn = () => void;
 
@@ -42,7 +42,7 @@ export default class Controller {
     });
   }
 
-    start() {
+  start() {
     if (this.intervalId !== null) return; // already running
     let lastModelTime = performance.now();
 
@@ -61,47 +61,56 @@ export default class Controller {
       this.model.update(delta * 1000);
       times['model.update'] = performance.now() - t0;
 
-  const cam = this.model.getCamera(this.camId);
+      const cam = this.model.getCamera(this.camId);
+      if (!cam) {
+        console.error("No camera")
+        return
+      }
 
       // movement calculations
-      const speedBase = this.keys.has('shift') ? -20 : -3; // units per second
-      const forward = Vector4.forward().scale(speedBase * delta);
-      const right = Vector4.right().scale(speedBase * delta);
-      const up = Vector4.up().scale(speedBase * delta);
+      const speedBase = this.keys.has('shift') ? 20 : 3; // units per second
+      const forward = V.vec4Scale(new Float32Array(4), V.forward(), speedBase * delta);
+      const right = V.vec4Scale(new Float32Array(4), V.right(), speedBase * delta);
+      const up = V.vec4Scale(new Float32Array(4), V.up(), speedBase * delta);
+      const backward = V.vec4Neg(new Float32Array(4), forward);
+      const left = V.vec4Neg(new Float32Array(4), right);
+      const down = V.vec4Neg(new Float32Array(4), up);
 
       let moveOps = 0;
       const t2 = performance.now();
       if (this.keys.has('w')) {
-        cam.position = cam.position.add(this.model.requestInverseRotation(cam).mul(forward));
+        const dir = M.mat4MulVec4(new Float32Array(4), this.model.requestInverseRotation(cam), backward);// forward is -Z in view space
+        cam.position=V.vec4Add(new Float32Array(4), cam.position, dir);
         moveOps++;
       }
       if (this.keys.has('s')) {
-        cam.position = cam.position.sub(this.model.requestInverseRotation(cam).mul(forward));
+        const dir = M.mat4MulVec4(new Float32Array(4), this.model.requestInverseRotation(cam), forward);
+        cam.position=V.vec4Add(new Float32Array(4), cam.position, dir);
         moveOps++;
       }
       if (this.keys.has('a')) {
-        cam.position = cam.position.add(this.model.requestInverseRotation(cam).mul(right));
+        const dir = M.mat4MulVec4(new Float32Array(4), this.model.requestInverseRotation(cam), right);
+        cam.position=V.vec4Add(new Float32Array(4), cam.position, dir);
         moveOps++;
       }
       if (this.keys.has('d')) {
-        cam.position = cam.position.sub(this.model.requestInverseRotation(cam).mul(right));
+        const dir = M.mat4MulVec4(new Float32Array(4), this.model.requestInverseRotation(cam), left);
+        cam.position=V.vec4Add(new Float32Array(4), cam.position, dir);
         moveOps++;
       }
       if (this.keys.has(' ')) {
-        cam.position = cam.position.sub(this.model.requestInverseRotation(cam).mul(up));
+        const dir = M.mat4MulVec4(new Float32Array(4), this.model.requestInverseRotation(cam), down);// i actually dont know lmfao
+        cam.position=V.vec4Add(new Float32Array(4), cam.position, dir);
         moveOps++;
       }
       if (this.keys.has('control')) {
-        cam.position = cam.position.add(this.model.requestInverseRotation(cam).mul(up));
+        const dir = M.mat4MulVec4(new Float32Array(4), this.model.requestInverseRotation(cam), up);
+        cam.position=V.vec4Add(new Float32Array(4), cam.position, dir);
         moveOps++;
       }
       times['movement'] = performance.now() - t2;
       times['movement_ops'] = moveOps;
 
-      const t3 = performance.now();
-      // push camera update into model
-      this.model.updateCamera(this.camId, cam.position, cam.rotation);
-      times['updateCamera'] = performance.now() - t3;
 
       const t4 = performance.now();
       // trigger rendering (render loop handles FPS/debug)
@@ -114,7 +123,7 @@ export default class Controller {
       for (const k of Object.keys(times)) {
         out += `\n${k}: ${times[k].toFixed(2)} ms`;
       }
-      out += `\n`; 
+      out += `\n`;
       this.debugEl.innerText += out;
     }, 1000 / 60);
   }
@@ -139,12 +148,14 @@ export default class Controller {
 
   private onMouseMove = (e: MouseEvent) => {
     const cam = this.model.getCamera(this.camId);
+    if (!cam) return;
     const dy = e.movementY * this.mouseSensitivity; // x axis rotation
     const dx = e.movementX * this.mouseSensitivity; // y axis rotation
-    const ry = Matrix4x4.rotationalMatrix(new Vector4(0, -dx, 0, 0));
-    const rx = Matrix4x4.rotationalMatrix(new Vector4(-dy, 0, 0, 0));
-    cam.rotation = rx.mulMatrix(ry.mulMatrix(cam.rotation));
+    const ry = M.mat4Rotation(0, -dx, 0);
+    const rx = M.mat4Rotation(-dy, 0, 0);
+
+    cam.rotation = M.mat4Mul(new Float32Array(16), ry, cam.rotation);
+    cam.rotation = M.mat4Mul(new Float32Array(16), rx, cam.rotation);
     cam.props.updateInverseRotation = true;
-    this.model.updateCamera(this.camId, cam.position, cam.rotation);
   };
 }
