@@ -6,4 +6,4 @@ Run the dev server:
 npm run dev
 ```
 
-See the detailed architecture and API documentation in `docs/ARCHITECTURE.md`.
+There will be no documentation for it is evil
