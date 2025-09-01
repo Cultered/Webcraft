@@ -134,13 +134,37 @@ export class WebGPUView extends BaseView {
         }
     }
 
-    public async registerSceneObjects(objects: SceneObject[]): Promise<void> {
+    private staticObjectCount = 0;
+
+    public async registerSceneObjects(objects: SceneObject[], updateVertices: boolean): Promise<void> {
+
         if (!this.device) throw new Error('WebGPU device not initialized');
 
 
         this.sceneObjects = objects;
         this.lastSceneObjectsRef = objects;
         this.updateObjectStorageBufferPartial(objects);
+    }
+
+    public async registerSceneObjectsSeparated(staticObjects: SceneObject[], nonStaticObjects: SceneObject[], updateVertices: boolean): Promise<void> {
+        if (!this.device) throw new Error('WebGPU device not initialized');
+        
+        const shouldUpdateStatic = this.staticSceneObjects !== staticObjects || updateVertices;
+        const shouldUpdateNonStatic = this.nonStaticSceneObjects !== nonStaticObjects || updateVertices;
+
+        if (shouldUpdateStatic || shouldUpdateNonStatic) {
+            this.staticSceneObjects = staticObjects;
+            this.nonStaticSceneObjects = nonStaticObjects;
+            this.staticObjectCount = staticObjects.length;
+            
+            if (shouldUpdateStatic) {
+                // Update entire buffer including static objects
+                this.updateObjectStorageBufferWithSeparation(staticObjects, nonStaticObjects);
+            } else {
+                // Only update non-static portion
+                this.updateNonStaticObjectsOnly(nonStaticObjects);
+            }
+        }
     }
 
     public registerCamera(camera: SceneObject): void {
@@ -207,7 +231,13 @@ export class WebGPUView extends BaseView {
             let instanceIndex = 0;
             let objIndex = 0;
             let buf;
-            for (const obj of this.sceneObjects) {
+
+            // Render both static and non-static objects (they're stored consecutively in the buffer)
+            const allObjects = this.staticSceneObjects.length > 0 || this.nonStaticSceneObjects.length > 0
+                ? [...this.staticSceneObjects, ...this.nonStaticSceneObjects]
+                : this.sceneObjects;
+
+            for (const obj of allObjects) {
                 objIndex++;
                 if (obj.props.mesh !== currentMeshId) {
                     buf = this.objectBuffers.get(obj.props.mesh!);
@@ -230,7 +260,9 @@ export class WebGPUView extends BaseView {
             this.device.queue.submit([commandEncoder.finish()]);
 
             if (this.debugEl) {
-                this.debugEl.innerText += `WebGPU ready\nObjects: ${objIndex}\nBuffers: ${this.objectBuffers.size}`;
+                const staticCount = this.staticSceneObjects.length;
+                const nonStaticCount = this.nonStaticSceneObjects.length;
+                this.debugEl.innerText += `WebGPU ready\nObjects: ${objIndex} (${staticCount} static, ${nonStaticCount} non-static)\nBuffers: ${this.objectBuffers.size}`;
                 this.debugEl.innerText += `\nCamerar: x${this.camera.position[0].toFixed(2)} y${this.camera.position[1].toFixed(2)} z${this.camera.position[2].toFixed(2)}`;
             }
         } catch (e) {
@@ -269,5 +301,64 @@ export class WebGPUView extends BaseView {
             allObjectMatricesBuffer.set(matrix, i * 16);
         }
         this.device.queue.writeBuffer(this.objectStorageBuffer!, 0, allObjectMatricesBuffer.buffer, 0, objectCount * 16 * 4);
+    }
+
+    private updateObjectStorageBufferWithSeparation(staticObjects: SceneObject[], nonStaticObjects: SceneObject[]): void {
+        if (!this.device) throw new Error('Device not initialized');
+        const totalObjectCount = staticObjects.length + nonStaticObjects.length;
+        
+        if (totalObjectCount > this.maxObjects || !this.objectStorageBuffer) {
+            this.maxObjects = Math.max(totalObjectCount, this.maxObjects);
+            this.objectStorageBuffer?.destroy();
+            this.objectStorageBuffer = this.device.createBuffer({ size: 64 * this.maxObjects, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST });
+        }
+
+        const allObjectMatricesBuffer = new Float32Array(totalObjectCount * 16);
+        let index = 0;
+
+        // First, write static objects
+        for (let i = 0; i < staticObjects.length; i++) {
+            const obj = staticObjects[i];
+            const translation = [obj.position[0], obj.position[1], obj.position[2]];
+            const scale = [obj.scale[0], obj.scale[1], obj.scale[2]];
+            const matrix = M.mat4Transpose(M.mat4TRS(translation, obj.rotation, scale));
+            allObjectMatricesBuffer.set(matrix, index * 16);
+            index++;
+        }
+
+        // Then, write non-static objects after static ones
+        for (let i = 0; i < nonStaticObjects.length; i++) {
+            const obj = nonStaticObjects[i];
+            const translation = [obj.position[0], obj.position[1], obj.position[2]];
+            const scale = [obj.scale[0], obj.scale[1], obj.scale[2]];
+            const matrix = M.mat4Transpose(M.mat4TRS(translation, obj.rotation, scale));
+            allObjectMatricesBuffer.set(matrix, index * 16);
+            index++;
+        }
+
+        this.device.queue.writeBuffer(this.objectStorageBuffer!, 0, allObjectMatricesBuffer.buffer, 0, totalObjectCount * 16 * 4);
+    }
+
+    private updateNonStaticObjectsOnly(nonStaticObjects: SceneObject[]): void {
+        if (!this.device || !this.objectStorageBuffer) throw new Error('Device or buffer not initialized');
+        
+        const nonStaticMatricesBuffer = new Float32Array(nonStaticObjects.length * 16);
+        for (let i = 0; i < nonStaticObjects.length; i++) {
+            const obj = nonStaticObjects[i];
+            const translation = [obj.position[0], obj.position[1], obj.position[2]];
+            const scale = [obj.scale[0], obj.scale[1], obj.scale[2]];
+            const matrix = M.mat4Transpose(M.mat4TRS(translation, obj.rotation, scale));
+            nonStaticMatricesBuffer.set(matrix, i * 16);
+        }
+
+        // Write only to the non-static portion of the buffer (after static objects)
+        const bufferOffset = this.staticObjectCount * 64; // 64 bytes per matrix (16 floats * 4 bytes)
+        this.device.queue.writeBuffer(
+            this.objectStorageBuffer,
+            bufferOffset,
+            nonStaticMatricesBuffer.buffer,
+            0,
+            nonStaticObjects.length * 16 * 4
+        );
     }
 }

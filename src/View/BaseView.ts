@@ -15,6 +15,8 @@ export abstract class BaseView {
     protected far = 1000;
     protected meshes: { [id: string]: Mesh } = {};
     protected sceneObjects: SceneObject[] = [];
+    protected staticSceneObjects: SceneObject[] = [];
+    protected nonStaticSceneObjects: SceneObject[] = [];
     protected lastSceneObjectsRef?: SceneObject[];
     protected lastCameraKey?: string;
     protected camera: SceneObject = {
@@ -42,6 +44,11 @@ export abstract class BaseView {
      * Register scene objects for rendering
      */
     public abstract registerSceneObjects(objects: SceneObject[]): Promise<void>;
+
+    /**
+     * Register scene objects separately for static/non-static optimization
+     */
+    public abstract registerSceneObjectsSeparated(staticObjects: SceneObject[], nonStaticObjects: SceneObject[], updateVertices: boolean): Promise<void>;
 
     /**
      * Set the debug element for displaying debug information

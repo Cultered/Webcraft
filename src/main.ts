@@ -50,7 +50,9 @@ if (!document.querySelector('#app')) {
 
     model.addComponentToEntity('obj-0-0-1', new Rotator(1.0, { x: 0, y: 1, z: 0 }));
 
-    await view.registerSceneObjects(model.getObjects());
+    const separatedObjects = model.getObjectsSeparated();
+    await view.registerSceneObjectsSeparated(separatedObjects.static, separatedObjects.nonStatic, true);
+
 
     const canvasEl = document.querySelector('#main-canvas') as HTMLCanvasElement;
     const controller = new Controller(model, view);
