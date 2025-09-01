@@ -187,7 +187,7 @@ export class WebGPUView extends BaseView {
         this.lastCameraKey = camKey;
 
         if (this.device && this.cameraBuffer) {
-            const camTransform = M.mat4Mul(new Float32Array(16), camera.rotation, M.mat4Translation(-camera.position[0], -camera.position[1], -camera.position[2]));
+            const camTransform = M.mat4Mul(M.mat4(), camera.rotation, M.mat4Translation(-camera.position[0], -camera.position[1], -camera.position[2]));
             this.device.queue.writeBuffer(this.cameraBuffer, 0, M.mat4Transpose(camTransform).buffer);
         }
     }

@@ -1,4 +1,4 @@
-import {createView} from './View/View';
+import { createView } from './View/View';
 import Model from './Model/Model';
 import MeshComponent from './Model/Components/MeshComponent';
 import { Entity } from './Model/Entity';
@@ -28,7 +28,7 @@ if (!document.querySelector('#app')) {
     const debugEl = setupDebugElement()
     view.setDebugElement(debugEl);
 
-    model.addCamera('main-camera', V.vec4(0,0,0), M.mat4Rotation(0, Math.PI, 0));
+    model.addCamera('main-camera', V.vec4(0, 0, 0), M.mat4Rotation(0, Math.PI, 0));
     const sphereMesh = { id: 'builtin-sphere', ...generateSphereMesh(3, 1) };
     const cubeMesh = { id: 'builtin-cube', ...generateCubeMesh(1) };
     view.uploadMeshToGPU(sphereMesh.id, sphereMesh.vertices, sphereMesh.indices);
@@ -43,10 +43,10 @@ if (!document.querySelector('#app')) {
             for (let k = 0; k < 30; k++) {
                 const id = `obj-${i}-${j}-${k}`;
                 const ent = new Entity(id, V.vec4(i * 2, j * 2, k * 2), undefined, V.vec4(0.1, 0.1, 0.1, 1));
-                if((i+j+k)%2==0){
-                ent.addComponent(sphereComponent);
+                if ((i + j + k) % 2 == 0) {
+                    ent.addComponent(sphereComponent);
                 }
-                else{
+                else {
                     ent.addComponent(cubeComponent);
                 }
                 model.addExistingEntity(ent);
@@ -56,13 +56,11 @@ if (!document.querySelector('#app')) {
 
     model.addComponentToEntity('obj-0-0-1', new Rotator(1.0, { x: 0, y: 1, z: 0 }));
 
-    const separatedObjects = model.getObjectsSeparated();
-    await view.registerSceneObjectsSeparated(separatedObjects.static, separatedObjects.nonStatic, true);
 
 
     const canvasEl = document.querySelector('#main-canvas') as HTMLCanvasElement;
     const controller = new Controller(model, view);
     controller.init(canvasEl, debugEl);
     controller.start();
-    
+
 })();

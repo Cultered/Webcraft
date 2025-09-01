@@ -171,7 +171,7 @@ export class WebGLView extends BaseView {
 
             // Set camera matrix (once per frame)
             if (this.glUniforms.cameraMatrix) {
-                const camTransform = M.mat4Mul(new Float32Array(16), this.camera.rotation, 
+                const camTransform = M.mat4Mul(M.mat4(), this.camera.rotation, 
                     M.mat4Translation(-this.camera.position[0], -this.camera.position[1], -this.camera.position[2]));
                 gl.uniformMatrix4fv(this.glUniforms.cameraMatrix, false, M.mat4Transpose(camTransform));
             }

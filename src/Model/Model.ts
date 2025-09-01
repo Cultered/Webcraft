@@ -99,8 +99,8 @@ export default class Model {
         const camChunk = this.chunkCoordsFromPosition(camPos);
         const camChunkKey = `${camChunk.x},${camChunk.y},${camChunk.z}`;
 
-        let camRotInv:Matrix4x4 = M.mat4Inverse(new Float32Array(16), camera.rotation)
-        let cameraForward = M.mat4MulVec4(new Float32Array(4),camRotInv,V.vec4Neg(V.vec4(),V.forward()));
+        let camRotInv:Matrix4x4 = M.mat4Inverse(M.mat4(), camera.rotation)
+        let cameraForward = M.mat4MulVec4(V.vec4(),camRotInv,V.vec4Neg(V.vec4(),V.forward()));
 
         if (this.lastCameraChunkKey === camChunkKey && !o11s.CPU_SOFT_FRUSTUM_CULLING) {
             return this.cachedVisibleObjects.map(id => this.entities.get(id)).filter(Boolean) as Entity[];
@@ -112,7 +112,7 @@ export default class Model {
                 for (let dz = -o11s.RENDER_DISTANCE; dz <= o11s.RENDER_DISTANCE; dz++) {
                     if (dx * dx + dy * dy + dz * dz > o11s.RENDER_DISTANCE * o11s.RENDER_DISTANCE) continue;
                     if (o11s.CPU_SOFT_FRUSTUM_CULLING) {
-                        if (V.vec4Dot(cameraForward, new Float32Array([dx, dy, dz, 0]) as Vector4) < -1) continue;
+                        if (V.vec4Dot(cameraForward, V.vec4(dx, dy, dz, 0)) < -1) continue;
                     }
                     const key = `${camChunk.x + dx},${camChunk.y + dy},${camChunk.z + dz}`;
                     const ids = this.chunks.get(key);
@@ -152,7 +152,7 @@ export default class Model {
     }
 
     addCamera(id: string, position?: Vector4, rotation?: Matrix4x4) {
-        const cam = new Entity(id, position ?? new Float32Array([0, 0, 0, 0]) as Vector4, rotation ?? M.mat4Identity(), new Float32Array([1, 1, 1, 1]) as Vector4);
+        const cam = new Entity(id, position ?? V.vec4(0, 0, 0, 0), rotation ?? M.mat4Identity(), V.vec4(1, 1, 1, 1));
         this.cameras.push(cam);
     }
 
@@ -164,7 +164,7 @@ export default class Model {
     requestInverseRotation(obj: SceneObject): Matrix4x4 {
         let newInverse = obj.props.inverseRotation
         if (obj.props.updateInverseRotation || !newInverse) {
-            newInverse = M.mat4Inverse(new Float32Array(16),obj.rotation)
+            newInverse = M.mat4Inverse(M.mat4(),obj.rotation)
             console.log("Computed new inverse rotation for ",obj.id,newInverse)
             obj.props.inverseRotation = newInverse
             obj.props.updateInverseRotation = false

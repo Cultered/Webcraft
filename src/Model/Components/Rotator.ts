@@ -15,7 +15,7 @@ export class Rotator implements Component {
     update(entity: Entity, deltaMs?: number) {
         const seconds = (deltaMs ?? 16) / 1000;
         const rot = M.mat4Rotation(this.axis.x * this.speed * seconds, this.axis.y * this.speed * seconds, this.axis.z * this.speed * seconds);
-        entity.rotation = M.mat4Mul(new Float32Array(16), rot, entity.rotation);
+        entity.rotation = M.mat4Mul(M.mat4(), rot, entity.rotation);
         return entity.rotation;
     }
 }

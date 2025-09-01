@@ -2,6 +2,7 @@ import type { Vector4 } from '../Types/Vector4';
 import type { Matrix4x4 } from '../Types/Matrix4x4';
 import * as M from '../misc/mat4';
 import type { Component } from './Components/Component';
+import { vec4 } from '../misc/vec4';
 
 // Minimal Entity class for an Entity-Component System
 export class Entity {
@@ -17,10 +18,9 @@ export class Entity {
 
     constructor(id: string, position?: Vector4, rotation?: Matrix4x4, scale?: Vector4) {
         this.id = id;
-        this.position = position ?? new Float32Array([0, 0, 0, 1]);
+        this.position = position ?? vec4(0, 0, 0, 1);
         this.rotation = rotation ?? M.mat4Identity();
-        this.scale = scale ?? new Float32Array([1, 1, 1, 1]);
-        
+        this.scale = scale ?? vec4(1, 1, 1, 1);
     }
 
     addComponent<T extends Component>(c: T): T {
