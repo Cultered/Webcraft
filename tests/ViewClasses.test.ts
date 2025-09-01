@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { WebGLView } from './WebGLView';
-import { WebGPUView } from './WebGPUView';
+import { WebGLView } from '../src/View/WebGLView';
+import { WebGPUView } from '../src/View/WebGPUView';
 
 // Mock the ShowWebGPUInstructions function
 vi.mock('../misc/misc', () => ({

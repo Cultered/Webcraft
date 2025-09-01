@@ -4,6 +4,7 @@ export function radians(degrees: number): number {
 export function ShowWebGPUInstructions() {
 
     console.error('WebGPU API unavailable or initialization failed:');
+    try{
     const instructions = document.createElement('div');
     instructions.style.position = 'absolute';
     instructions.style.top = '0';
@@ -25,4 +26,8 @@ export function ShowWebGPUInstructions() {
                     </ul>
                 `;
     document.body.appendChild(instructions);
+    }
+    catch (error) {
+        console.error('WebGPU is not supported or enabled in your browser');
+    }
 }

@@ -1,11 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import Model from './Model';
-import { Entity } from './Entity';
-import { MeshComponent } from './Components/MeshComponent';
-import { Rotator } from './Components/Rotator';
-import type { Mesh } from '../Types/MeshType';
-import * as V from '../misc/vec4';
-import * as M from '../misc/mat4';
+import Model from '../src/Model/Model';
+import { Entity } from '../src/Model/Entity';
+import { MeshComponent } from '../src/Model/Components/MeshComponent';
+import { Rotator } from '../src/Model/Components/Rotator';
+import type { Mesh } from '../src/Types/MeshType';
+import * as V from '../src/misc/vec4';
+import * as M from '../src/misc/mat4';
 
 // Mock meshes for testing
 const mockMesh1: Mesh = {
