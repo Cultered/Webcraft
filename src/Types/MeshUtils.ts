@@ -1,8 +1,5 @@
-export type Mesh = {
-    id: string;
-    vertices: Float32Array;
-    indices: Uint32Array | Uint16Array;
-}
+import type { Mesh } from './MeshType';
+
 export const LOD_MESH: Mesh = {
         id: "builtin-lod-mesh",
         vertices: new Float32Array(

@@ -1,13 +1,12 @@
-import type { Vector4 } from '../misc/Vector4';
-import type { Matrix4x4 } from '../misc/Matrix4x4';
+import type { Vector4 } from '../Types/Vector4';
+import type { Matrix4x4 } from '../Types/Matrix4x4';
 import * as V from '../misc/Vector4';
 import * as M from '../misc/Matrix4x4';
 import { Entity } from './Entity';
 import MeshComponent from './Components/MeshComponent';
-import type { Mesh } from '../Types/Mesh';
+import type { Mesh } from '../Types/MeshType';
 import type { Optimizations } from '../Types/Optimizations';
 import type { SceneObject } from '../Types/SceneObject';
-import type View from '../View/View';
 
 export const o11s: Optimizations = {
     CPU_CHUNKS: true,
