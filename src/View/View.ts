@@ -8,7 +8,7 @@ import { setUpCanvas } from '../misc/setUpCanvas';
  * @param useWebGPU - Whether to use WebGPU (true) or WebGL (false)
  * @returns A view instance (WebGPUView or WebGLView)
  */
-export async function createView(useWebGPU: boolean = true): Promise<BaseView> {
+export async function createView(useWebGPU: boolean = true): Promise<WebGLView | WebGPUView> {
     let view;
     if (useWebGPU) {
         view = new WebGPUView();

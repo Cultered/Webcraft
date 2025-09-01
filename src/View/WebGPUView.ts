@@ -136,7 +136,7 @@ export class WebGPUView extends BaseView {
 
     private staticObjectCount = 0;
 
-    public async registerSceneObjects(objects: SceneObject[], updateVertices: boolean): Promise<void> {
+    public async registerSceneObjects(objects: SceneObject[]): Promise<void> {
 
         if (!this.device) throw new Error('WebGPU device not initialized');
 

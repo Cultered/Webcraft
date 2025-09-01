@@ -137,7 +137,7 @@ export default class Controller {
     // update scene objects; non-blocking
     const separatedObjects = this.model.getObjectsSeparated();
     this.view.registerSceneObjectsSeparated(separatedObjects.static, separatedObjects.nonStatic, false).catch(err => console.error('registerSceneObjectsSeparated failed', err));
-SceneObjects'] = performance.now() - t0;
+    times['registerSceneObjects'] = performance.now() - t0;
 
     const t1 = performance.now();
     const mainCam = this.model.getCamera(this.camId);

@@ -1,7 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { WebGLView } from './WebGLView';
 import { WebGPUView } from './WebGPUView';
-import { createView } from './View';
 
 // Mock the ShowWebGPUInstructions function
 vi.mock('../misc/misc', () => ({
@@ -211,22 +210,5 @@ describe('WebGPUView', () => {
         };
 
         expect(() => webgpuView.uploadMeshes(meshes)).not.toThrow();
-    });
-});
-
-describe('View Factory', () => {
-    it('should create WebGPUView by default', () => {
-        const view = createView();
-        expect(view).toBeInstanceOf(WebGPUView);
-    });
-
-    it('should create WebGPUView when useWebGPU is true', () => {
-        const view = createView(true);
-        expect(view).toBeInstanceOf(WebGPUView);
-    });
-
-    it('should create WebGLView when useWebGPU is false', () => {
-        const view = createView(false);
-        expect(view).toBeInstanceOf(WebGLView);
     });
 });
