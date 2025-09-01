@@ -21,7 +21,19 @@ if (!document.querySelector('#app')) {
 (async () => {
     const view = new View();
     const model = new Model(view);
-    await view.initWebGPU(setUpCanvas());
+    
+    // Check URL parameters to determine which backend to use
+    const urlParams = new URLSearchParams(window.location.search);
+    const useWebGPU = urlParams.get('renderer') !== 'webgl';
+    
+    if (useWebGPU) {
+        await view.initWebGPU(setUpCanvas());
+        console.log('Using WebGPU renderer');
+    } else {
+        view.init(setUpCanvas(), false);
+        console.log('Using WebGL renderer');
+    }
+    
     const debugEl = setupDebugElement()
     view.setDebugElement(debugEl);
 

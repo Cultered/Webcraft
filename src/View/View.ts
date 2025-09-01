@@ -276,16 +276,21 @@ class View {
     }
 
     async registerSceneObjects(objects: SceneObject[], updateVertices: boolean) {
-        if (!this.device) throw new Error('Device not initialized');
+        if (!this.device && !this.gl) throw new Error('Neither WebGPU device nor WebGL context initialized');
             if (objects === this.lastSceneObjectsRef && !updateVertices) {
-                this.updateObjectStorageBufferPartial(objects);
+                if (this.device) {
+                    this.updateObjectStorageBufferPartial(objects);
+                }
                 return;
             }
 
         this.sceneObjects = objects;
         this.lastSceneObjectsRef = objects;
 
-        this.updateObjectStorageBufferPartial(objects);
+        if (this.device) {
+            this.updateObjectStorageBufferPartial(objects);
+        }
+        // For WebGL, we don't need to pre-upload matrices as we update them per draw call
     }
     registerCamera(camera: SceneObject) {
         const camKey = `${camera.position[0]},${camera.position[1]},${camera.position[2]}|${JSON.stringify(camera.rotation)}`;

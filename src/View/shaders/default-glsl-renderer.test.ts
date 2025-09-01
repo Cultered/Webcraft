@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect } from 'vitest';
 import { vertexShader, fragmentShader } from './default-glsl-renderer';
 
 describe('GLSL Shader Tests', () => {
