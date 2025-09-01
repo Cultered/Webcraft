@@ -9,6 +9,7 @@ export class Entity {
     position: Vector4;
     rotation: Matrix4x4;
     scale: Vector4;
+    isStatic: boolean = true;
     // components keyed by constructor name for fast lookup
     components: Map<string, Component> = new Map();
     // keep props for backwards-compatibility with existing View code
@@ -23,6 +24,7 @@ export class Entity {
     }
 
     addComponent<T extends Component>(c: T): T {
+        if(c.update) this.isStatic = false;
         const key = (c as any).constructor?.name ?? String(Math.random());
         this.components.set(key, c);
         c.start(this);
@@ -35,6 +37,7 @@ export class Entity {
     }
 
     update(deltaMs?: number) {
+        if (this.isStatic) return;
         const out: any[] = [];
         for (const c of this.components.values()) {
             if (c.update) out.push(c.update(this, deltaMs));
