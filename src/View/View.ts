@@ -158,7 +158,7 @@ class View {
         }
     }
 
-    initWebGL(canvas: HTMLCanvasElement) {
+    async initWebGL(canvas: HTMLCanvasElement) {
         try {
             const gl = canvas.getContext('webgl2', { 
                 antialias: true, 

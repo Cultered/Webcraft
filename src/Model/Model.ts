@@ -45,8 +45,7 @@ export default class Model {
         return out;
     }
 
-    constructor(view: View) {
-        view.setWebGPUBackend(o11s.USE_WEBGPU);
+    constructor() {
     }
 
     addEntity(id: string, opts: {

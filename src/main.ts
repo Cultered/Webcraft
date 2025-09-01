@@ -9,6 +9,7 @@ import { setUpCanvas } from './misc/setUpCanvas';
 import * as M from './misc/Matrix4x4';
 import Controller from './Controller/Controller';
 import Rotator from './Model/Components/Rotator';
+import { o11s } from './Model/Model';
 
 console.log('starting app');
 
@@ -20,24 +21,16 @@ if (!document.querySelector('#app')) {
 
 (async () => {
     const view = new View();
-    const model = new Model(view);
-    
-    // Check URL parameters to determine which backend to use
-    const urlParams = new URLSearchParams(window.location.search);
-    const useWebGPU = urlParams.get('renderer') !== 'webgl';
-    
-    if (useWebGPU) {
-        await view.initWebGPU(setUpCanvas());
-        console.log('Using WebGPU renderer');
-    } else {
-        view.init(setUpCanvas(), false);
-        console.log('Using WebGL renderer');
-    }
-    
+    const model = new Model();
+
+
+
+    await view.init(setUpCanvas(), o11s.USE_WEBGPU);
+
     const debugEl = setupDebugElement()
     view.setDebugElement(debugEl);
 
-    model.addCamera('main-camera', new Float32Array([10, 10, 10, 0]) as Vector4, M.mat4Rotation(0, 0, 0));
+    model.addCamera('main-camera', new Float32Array([0, 0, 0, 0]) as Vector4, M.mat4Rotation(0, Math.PI, 0));
     const sphereMesh = { id: 'builtin-sphere', ...generateSphereMesh(3, 1) };
     const cubeMesh = { id: 'builtin-cube', ...generateCubeMesh(1) };
     view.uploadMeshToGPU(sphereMesh.id, sphereMesh.vertices, sphereMesh.indices);
@@ -75,7 +68,7 @@ if (!document.querySelector('#app')) {
 
         const t1 = performance.now();
         const mainCam = model.getCamera("main-camera");
-        if (!mainCam) {console.error("No main camera");return}
+        if (!mainCam) { console.error("No main camera"); return }
         view.registerCamera(mainCam);
         times['registerCamera'] = performance.now() - t1;
 
