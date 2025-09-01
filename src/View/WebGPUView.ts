@@ -1,9 +1,9 @@
 import { BaseView } from './BaseView';
 import { renderer } from './shaders/default-wgsl-renderer';
 import type { SceneObject } from '../Types/SceneObject';
-import type { Mesh } from '../Types/Mesh';
+import type { Mesh } from '../Types/MeshType';
 import { ShowWebGPUInstructions } from '../misc/misc';
-import * as M from '../misc/Matrix4x4';
+import * as M from '../misc/mat4';
 
 /**
  * WebGPU-based rendering implementation.

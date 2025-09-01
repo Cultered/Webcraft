@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { MeshComponent } from './MeshComponent';
 import { Entity } from '../Entity';
-import type { Mesh } from '../../Types/Mesh';
+import type { Mesh } from '../../Types/MeshType';
 
 // Mock mesh for testing
 const mockMesh: Mesh = {

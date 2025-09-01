@@ -2,8 +2,8 @@ import { describe, it, expect } from "vitest";
 import {
   mat4, mat4Identity, mat4Inverse, mat4Mul, mat4MulVec4,
   mat4Translation, mat4Scale, mat4Rotation, mat4TRS, mat4Projection,
-} from "./Matrix4x4";
-import { vec4LenSq } from "./Vector4";
+} from "./mat4";
+import { vec4LenSq } from "./vec4";
 function almostEqual(a: number, b: number, eps = 1e-5) {
   return Math.abs(a - b) < eps;
 }

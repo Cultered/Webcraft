@@ -1,6 +1,6 @@
 import type { Vector4 } from '../Types/Vector4';
 import type { Matrix4x4 } from '../Types/Matrix4x4';
-import * as M from '../misc/Matrix4x4';
+import * as M from '../misc/mat4';
 import type { Component } from './Components/Component';
 
 // Minimal Entity class for an Entity-Component System

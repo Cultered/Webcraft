@@ -1,6 +1,6 @@
 import View from '../View/View';
 import { generateCubeMesh } from '../Types/MeshUtils';
-import * as M from '../misc/Matrix4x4';
+import * as M from '../misc/mat4';
 import type { Vector4 } from '../Types/Vector4';
 import type { SceneObject } from '../Types/SceneObject';
 

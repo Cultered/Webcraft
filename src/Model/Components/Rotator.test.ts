@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { Rotator } from './Rotator';
 import { Entity } from '../Entity';
-import * as M from '../../misc/Matrix4x4';
+import * as M from '../../misc/mat4';
 
 // Helper to compare matrices with tolerance for floating point precision
 function matricesEqual(a: Float32Array, b: Float32Array, tolerance = 1e-6): boolean {

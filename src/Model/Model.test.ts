@@ -3,9 +3,9 @@ import Model from './Model';
 import { Entity } from './Entity';
 import { MeshComponent } from './Components/MeshComponent';
 import { Rotator } from './Components/Rotator';
-import type { Mesh } from '../Types/Mesh';
-import * as V from '../misc/Vector4';
-import * as M from '../misc/Matrix4x4';
+import type { Mesh } from '../Types/MeshType';
+import * as V from '../misc/vec4';
+import * as M from '../misc/mat4';
 
 // Mock meshes for testing
 const mockMesh1: Mesh = {
@@ -46,7 +46,7 @@ describe('Model', () => {
         });
 
         it('should add entity with custom position', () => {
-            const position = new Float32Array([1, 2, 3, 1]) as V.Vector4;
+            const position = V.vec4(1, 2, 3, 1);
             const entity = model.addEntity('positioned-entity', { position });
             
             expect(entity.position).toBe(position);
@@ -54,7 +54,7 @@ describe('Model', () => {
 
         it('should add entity with custom rotation and scale', () => {
             const rotation = M.mat4Rotation(0, Math.PI / 2, 0);
-            const scale = new Float32Array([2, 2, 2, 1]) as V.Vector4;
+            const scale = V.vec4(2, 2, 2, 1);
             
             const entity = model.addEntity('transformed-entity', { rotation, scale });
             
@@ -134,7 +134,7 @@ describe('Model', () => {
     describe('Position Management', () => {
         it('should set entity position', () => {
             const entity = model.addEntity('movable-entity');
-            const newPosition = new Float32Array([5, 10, 15, 1]) as V.Vector4;
+            const newPosition = V.vec4(5, 10, 15, 1);
             
             const result = model.setObjectPosition('movable-entity', newPosition);
             
@@ -143,7 +143,7 @@ describe('Model', () => {
         });
 
         it('should return false when setting position of non-existent entity', () => {
-            const newPosition = new Float32Array([1, 2, 3, 1]) as V.Vector4;
+            const newPosition = V.vec4(1, 2, 3, 1);
             
             const result = model.setObjectPosition('non-existent', newPosition);
             
@@ -164,7 +164,7 @@ describe('Model', () => {
         });
 
         it('should add camera with custom position and rotation', () => {
-            const position = new Float32Array([1, 2, 3, 0]) as V.Vector4;
+            const position = V.vec4(1, 2, 3, 0);
             const rotation = M.mat4Rotation(Math.PI / 4, 0, 0);
             
             model.addCamera('custom-camera', position, rotation);
@@ -218,10 +218,10 @@ describe('Model', () => {
     describe('Scene Object Generation', () => {
         it('should get objects without camera (fallback mode)', () => {
             model.addEntity('entity-1', {
-                position: new Float32Array([1, 2, 3, 1]) as V.Vector4
+                position: V.vec4(1, 2, 3, 1)
             });
             model.addEntity('entity-2', {
-                position: new Float32Array([4, 5, 6, 1]) as V.Vector4
+                position: V.vec4(4, 5, 6, 1)
             });
             
             const objects = model.getObjects();
@@ -235,11 +235,10 @@ describe('Model', () => {
 
         it('should get objects with camera for chunk-based culling', () => {
             // Add main camera
-            model.addCamera('main-camera', new Float32Array([0, 0, 0, 0]) as V.Vector4);
-            
+            model.addCamera('main-camera', V.vec4(0, 0, 0, 0));
             // Add entities near the camera
             model.addEntity('near-entity', {
-                position: new Float32Array([1, 1, 1, 1]) as V.Vector4
+                position: V.vec4(1, 1, 1, 1)
             });
             
             const objects = model.getObjects();
@@ -249,10 +248,9 @@ describe('Model', () => {
         });
 
         it('should handle entities with mesh components for LOD', () => {
-            model.addCamera('main-camera', new Float32Array([0, 0, 0, 0]) as V.Vector4);
-            
+            model.addCamera('main-camera', V.vec4(0, 0, 0, 0));
             const entity = model.addEntity('lod-entity', {
-                position: new Float32Array([0, 0, 0, 1]) as V.Vector4 // Close to camera
+                position: V.vec4(0, 0, 0, 1) // Close to camera
             });
             entity.addComponent(new MeshComponent(mockMesh1, true));
             
@@ -294,9 +292,9 @@ describe('Model', () => {
 
     describe('Scene Object Conversion', () => {
         it('should convert entity to scene object correctly', () => {
-            const position = new Float32Array([1, 2, 3, 1]) as V.Vector4;
+            const position = V.vec4(1, 2, 3, 1);
             const rotation = M.mat4Rotation(0, Math.PI / 4, 0);
-            const scale = new Float32Array([2, 2, 2, 1]) as V.Vector4;
+            const scale = V.vec4(2, 2, 2, 1);
             
             const entity = model.addEntity('scene-entity', { position, rotation, scale });
             entity.props.customProp = 'test-value';
@@ -347,19 +345,19 @@ describe('Model', () => {
 
         it('should integrate with camera and chunking system', () => {
             // Add camera at origin
-            model.addCamera('main-camera', new Float32Array([0, 0, 0, 0]) as V.Vector4);
-            
+            model.addCamera('main-camera', V.vec4(0, 0, 0, 0));
+
             // Add entities at various distances
             model.addEntity('close', {
-                position: new Float32Array([1, 1, 1, 1]) as V.Vector4
+                position: V.vec4(1, 1, 1, 1)
             });
             
             model.addEntity('medium', {
-                position: new Float32Array([30, 30, 30, 1]) as V.Vector4
+                position: V.vec4(30, 30, 30, 1)
             });
             
             model.addEntity('far', {
-                position: new Float32Array([200, 200, 200, 1]) as V.Vector4
+                position: V.vec4(200, 200, 200, 1)
             });
             
             const objects = model.getObjects();

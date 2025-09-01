@@ -1,4 +1,4 @@
-import * as V from './Vector4';
+import * as V from './vec4';
 import { describe, it, expect } from 'vitest';
 describe('Vector4 functions', () => {
     let out = V.vec4();

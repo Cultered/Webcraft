@@ -1,6 +1,6 @@
 import type { Component } from './Component';
 import { Entity } from '../Entity';
-import * as M from '../../misc/Matrix4x4';
+import * as M from '../../misc/mat4';
 
 export class Rotator implements Component {
     speed: number;

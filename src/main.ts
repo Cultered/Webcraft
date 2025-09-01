@@ -6,7 +6,7 @@ import { generateSphereMesh, generateCubeMesh, LOD_MESH } from './Types/MeshUtil
 import type { Vector4 } from './Types/Vector4';
 import { setupDebugElement } from './misc/setupDebugElement';
 import { setUpCanvas } from './misc/setUpCanvas';
-import * as M from './misc/Matrix4x4';
+import * as M from './misc/mat4';
 import Controller from './Controller/Controller';
 import Rotator from './Model/Components/Rotator';
 import { o11s } from './Model/Model';

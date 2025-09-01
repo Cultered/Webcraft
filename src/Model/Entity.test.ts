@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { Entity } from './Entity';
 import type { Component } from './Components/Component';
-import * as M from '../misc/Matrix4x4';
+import * as M from '../misc/mat4';
 
 // Mock components for testing
 class MockComponent implements Component {

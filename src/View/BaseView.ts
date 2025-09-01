@@ -1,7 +1,7 @@
-import type { Vector4 } from '../misc/Vector4';
 import type { SceneObject } from '../Types/SceneObject';
-import type { Mesh } from '../Types/Mesh';
-import * as M from '../misc/Matrix4x4';
+import type { Mesh } from '../Types/MeshType';
+import * as V from '../misc/vec4';
+import * as M from '../misc/mat4';
 
 /**
  * Base interface/abstract class for rendering views
@@ -19,9 +19,9 @@ export abstract class BaseView {
     protected lastCameraKey?: string;
     protected camera: SceneObject = {
         id: 'viewCamera',
-        position: new Float32Array([0, 0, 0, 1]) as Vector4,
+        position: V.vec4(0, 0, 0, 1),
         rotation: M.mat4Identity(),
-        scale: new Float32Array([1, 1, 1, 1]) as Vector4,
+        scale: V.vec4(1, 1, 1, 1),
         props: {}
     };
     protected debugEl?: HTMLDivElement;

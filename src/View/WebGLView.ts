@@ -1,8 +1,8 @@
 import { BaseView } from './BaseView';
 import { vertexShader, fragmentShader } from './shaders/default-glsl-renderer';
 import type { SceneObject } from '../Types/SceneObject';
-import type { Mesh } from '../Types/Mesh';
-import * as M from '../misc/Matrix4x4';
+import type { Mesh } from '../Types/MeshType';
+import * as M from '../misc/mat4';
 
 /**
  * WebGL-based rendering implementation.

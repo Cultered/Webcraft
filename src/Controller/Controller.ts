@@ -1,6 +1,6 @@
 import Model from '../Model/Model';
-import * as V from '../misc/Vector4';
-import * as M from '../misc/Matrix4x4';
+import * as V from '../misc/vec4';
+import * as M from '../misc/mat4';
 
 type RenderFn = () => void;
 
