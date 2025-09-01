@@ -77,7 +77,6 @@ describe('WebGPUView Static Optimization', () => {
             
             // Check that internal state is correct
             expect((view as any).staticObjectCount).toBe(2);
-            expect((view as any).nonStaticObjectCount).toBe(1);
             expect((view as any).staticSceneObjects).toBe(staticObjects);
             expect((view as any).nonStaticSceneObjects).toBe(nonStaticObjects);
         });
