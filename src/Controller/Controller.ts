@@ -135,7 +135,8 @@ export default class Controller {
 
     const t0 = performance.now();
     // update scene objects; non-blocking
-    this.view.registerSceneObjects(this.model.getObjects(), false).catch(err => console.error('registerSceneObjects failed', err));
+    const separatedObjects = this.model.getObjectsSeparated();
+    this.view.registerSceneObjectsSeparated(separatedObjects.static, separatedObjects.nonStatic, false).catch(err => console.error('registerSceneObjectsSeparated failed', err));
     times['registerSceneObjects'] = performance.now() - t0;
 
     const t1 = performance.now();

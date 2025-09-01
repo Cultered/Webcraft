@@ -127,6 +127,15 @@ export class WebGLView extends BaseView {
         // For WebGL, we don't need to pre-upload matrices as we update them per draw call
     }
 
+    public async registerSceneObjectsSeparated(staticObjects: SceneObject[], nonStaticObjects: SceneObject[], _updateVertices: boolean): Promise<void> {
+        if (!this.gl) throw new Error('WebGL context not initialized');
+        
+        this.staticSceneObjects = staticObjects;
+        this.nonStaticSceneObjects = nonStaticObjects;
+        // For WebGL, we don't need to pre-upload matrices as we update them per draw call
+        // The optimization here is that we know which objects are static vs dynamic for batching/sorting
+    }
+
     public registerCamera(camera: SceneObject): void {
         const camKey = `${camera.position[0]},${camera.position[1]},${camera.position[2]}|${JSON.stringify(camera.rotation)}`;
         if (camKey === this.lastCameraKey) {
@@ -185,7 +194,12 @@ export class WebGLView extends BaseView {
             let objIndex = 0;
             let buf;
 
-            for (const obj of this.sceneObjects) {
+            // Use separated objects if available, otherwise fall back to combined sceneObjects
+            const allObjects = this.staticSceneObjects.length > 0 || this.nonStaticSceneObjects.length > 0
+                ? [...this.staticSceneObjects, ...this.nonStaticSceneObjects]
+                : this.sceneObjects;
+
+            for (const obj of allObjects) {
                 objIndex++;
                 
                 // Switch mesh if needed
@@ -219,7 +233,9 @@ export class WebGLView extends BaseView {
             }
 
             if (this.debugEl) {
-                this.debugEl.innerText = `WebGL ready\nObjects: ${objIndex}\nBuffers: ${this.glVertexBuffers.size}`;
+                const staticCount = this.staticSceneObjects.length;
+                const nonStaticCount = this.nonStaticSceneObjects.length;
+                this.debugEl.innerText = `WebGL ready\nObjects: ${objIndex} (${staticCount} static, ${nonStaticCount} non-static)\nBuffers: ${this.glVertexBuffers.size}`;
                 this.debugEl.innerText += `\nCamera: x${this.camera.position[0].toFixed(2)} y${this.camera.position[1].toFixed(2)} z${this.camera.position[2].toFixed(2)}`;
             }
         } catch (e) {
