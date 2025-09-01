@@ -9,7 +9,7 @@ import * as M from '../misc/mat4';
  */
 export abstract class BaseView {
     // Common properties
-    public maxObjects = 1000000;
+    public maxObjects = 1_000_000;
     protected fov = 30;
     protected near = 0.1;
     protected far = 1000;
@@ -43,7 +43,7 @@ export abstract class BaseView {
     /**
      * Register scene objects for rendering
      */
-    public abstract registerSceneObjects(objects: SceneObject[], updateVertices: boolean): Promise<void>;
+    public abstract registerSceneObjects(objects: SceneObject[]): Promise<void>;
 
     /**
      * Register scene objects separately for static/non-static optimization

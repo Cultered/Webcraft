@@ -115,16 +115,10 @@ export class WebGLView extends BaseView {
         }
     }
 
-    public async registerSceneObjects(objects: SceneObject[], updateVertices: boolean): Promise<void> {
+    public async registerSceneObjects(objects: SceneObject[]): Promise<void> {
         if (!this.gl) throw new Error('WebGL context not initialized');
-        
-        if (objects === this.lastSceneObjectsRef && !updateVertices) {
-            return;
-        }
-
+    
         this.sceneObjects = objects;
-        this.lastSceneObjectsRef = objects;
-        // For WebGL, we don't need to pre-upload matrices as we update them per draw call
     }
 
     public async registerSceneObjectsSeparated(staticObjects: SceneObject[], nonStaticObjects: SceneObject[], _updateVertices: boolean): Promise<void> {
