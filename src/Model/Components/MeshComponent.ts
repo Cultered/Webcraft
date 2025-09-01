@@ -1,6 +1,6 @@
 import type { Component } from './Component';
 import { Entity } from '../Entity';
-import type { Mesh } from '../../Types/Mesh';
+import type { Mesh } from '../../Types/MeshType';
 
 export class MeshComponent implements Component {
     mesh: Mesh;

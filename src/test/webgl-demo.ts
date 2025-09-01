@@ -1,7 +1,7 @@
 import View from '../View/View';
-import { generateCubeMesh } from '../Types/Mesh';
+import { generateCubeMesh } from '../Types/MeshUtils';
 import * as M from '../misc/Matrix4x4';
-import type { Vector4 } from '../misc/Vector4';
+import type { Vector4 } from '../Types/Vector4';
 import type { SceneObject } from '../Types/SceneObject';
 
 // Simple test to verify WebGL rendering works

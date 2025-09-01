@@ -1,0 +1,1 @@
+export type Matrix4x4 = Float32Array;

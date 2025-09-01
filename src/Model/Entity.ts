@@ -1,5 +1,5 @@
-import type { Vector4 } from '../misc/Vector4';
-import type { Matrix4x4 } from '../misc/Matrix4x4';
+import type { Vector4 } from '../Types/Vector4';
+import type { Matrix4x4 } from '../Types/Matrix4x4';
 import * as M from '../misc/Matrix4x4';
 import type { Component } from './Components/Component';
 

@@ -1,6 +1,6 @@
-import type { Vector4 } from "./Vector4";
+import type { Vector4 } from "../Types/Vector4";
+import type { Matrix4x4 } from "../Types/Matrix4x4";
 
-export type Matrix4x4 = Float32Array
 export function mat4(
   m00 = 1, m01 = 0, m02 = 0, m03 = 0,
   m10 = 0, m11 = 1, m12 = 0, m13 = 0,
