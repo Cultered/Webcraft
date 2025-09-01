@@ -122,12 +122,6 @@ describe('WebGLView', () => {
         });
     });
 
-    it('should register scene objects', async () => {
-        mockCanvas.getContext.mockReturnValue(mockWebGL2Context);
-        await webglView.init(mockCanvas);
-        
-        await expect(webglView.registerSceneObjects([mockSceneObject])).resolves.not.toThrow();
-    });
 
     it('should register camera', () => {
         expect(() => webglView.registerCamera(mockSceneObject)).not.toThrow();
@@ -192,9 +186,6 @@ describe('WebGPUView', () => {
         }
     });
 
-    it('should register scene objects without device', async () => {
-        await expect(webgpuView.registerSceneObjects([mockSceneObject])).rejects.toThrow('WebGPU device not initialized');
-    });
 
     it('should register camera', () => {
         expect(() => webgpuView.registerCamera(mockSceneObject)).not.toThrow();

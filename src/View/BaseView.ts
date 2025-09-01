@@ -43,7 +43,6 @@ export abstract class BaseView {
     /**
      * Register scene objects for rendering
      */
-    public abstract registerSceneObjects(objects: SceneObject[]): Promise<void>;
 
     /**
      * Register scene objects separately for static/non-static optimization

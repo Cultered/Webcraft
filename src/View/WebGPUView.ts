@@ -27,6 +27,7 @@ export class WebGPUView extends BaseView {
     private depthTexture?: GPUTexture;
     private renderPipeline?: GPURenderPipeline;
     private objectBuffers = new Map<string, { vertexBuffer: GPUBuffer; indexBuffer: GPUBuffer; indices: Uint32Array | Uint16Array }>();
+    private meshBatches = new Map<string, { base: number; count: number }>();
     private bindGroup?: GPUBindGroup;
     private objectStorageBuffer?: GPUBuffer;
     private cameraBuffer?: GPUBuffer;
@@ -134,37 +135,24 @@ export class WebGPUView extends BaseView {
         }
     }
 
-    private staticObjectCount = 0;
+    // removed staticObjectCount; batches track ordering
 
-    public async registerSceneObjects(objects: SceneObject[]): Promise<void> {
 
+    public async registerSceneObjectsSeparated(staticObjects: SceneObject[], nonStaticObjects: SceneObject[], updateStatic: boolean): Promise<void> {
         if (!this.device) throw new Error('WebGPU device not initialized');
 
 
-        this.sceneObjects = objects;
-        this.lastSceneObjectsRef = objects;
-        this.updateObjectStorageBufferPartial(objects);
-    }
+    this.staticSceneObjects = staticObjects;
+    this.nonStaticSceneObjects = nonStaticObjects;
 
-    public async registerSceneObjectsSeparated(staticObjects: SceneObject[], nonStaticObjects: SceneObject[], updateVertices: boolean): Promise<void> {
-        if (!this.device) throw new Error('WebGPU device not initialized');
-        
-        const shouldUpdateStatic = this.staticSceneObjects !== staticObjects || updateVertices;
-        const shouldUpdateNonStatic = this.nonStaticSceneObjects !== nonStaticObjects || updateVertices;
-
-        if (shouldUpdateStatic || shouldUpdateNonStatic) {
-            this.staticSceneObjects = staticObjects;
-            this.nonStaticSceneObjects = nonStaticObjects;
-            this.staticObjectCount = staticObjects.length;
-            
-            if (shouldUpdateStatic) {
-                // Update entire buffer including static objects
-                this.updateObjectStorageBufferWithSeparation(staticObjects, nonStaticObjects);
-            } else {
-                // Only update non-static portion
-                this.updateNonStaticObjectsOnly(nonStaticObjects);
-            }
+        if (updateStatic) {
+            // Update entire buffer including static objects
+            this.updateObjectStorageBufferWithSeparation(staticObjects, nonStaticObjects);
+        } else {
+            // Only update non-static portion
+            this.updateNonStaticObjectsOnly(nonStaticObjects);
         }
+
     }
 
     public registerCamera(camera: SceneObject): void {
@@ -227,33 +215,17 @@ export class WebGPUView extends BaseView {
             const passEncoder = commandEncoder.beginRenderPass(renderPassDescriptor);
             passEncoder.setPipeline(this.renderPipeline);
 
-            let currentMeshId: string = "empty";
-            let instanceIndex = 0;
+            // Real instancing: bind once and draw per-mesh using firstInstance + instanceCount
+            passEncoder.setBindGroup(0, this.bindGroup!);
             let objIndex = 0;
-            let buf;
-
-            // Render both static and non-static objects (they're stored consecutively in the buffer)
-            const allObjects = this.staticSceneObjects.length > 0 || this.nonStaticSceneObjects.length > 0
-                ? [...this.staticSceneObjects, ...this.nonStaticSceneObjects]
-                : this.sceneObjects;
-
-            for (const obj of allObjects) {
-                objIndex++;
-                if (obj.props.mesh !== currentMeshId) {
-                    buf = this.objectBuffers.get(obj.props.mesh!);
-                    instanceIndex++;
-                    if (!buf) continue;
-
-                    passEncoder.setVertexBuffer(0, buf.vertexBuffer);
-
-                    const indexFormat: GPUIndexFormat = (buf.indices instanceof Uint16Array) ? 'uint16' : 'uint32';
-                    passEncoder.setIndexBuffer(buf.indexBuffer, indexFormat);
-
-                    passEncoder.setBindGroup(0, this.bindGroup);
-                }
+            for (const [meshId, batch] of this.meshBatches) {
+                const buf = this.objectBuffers.get(meshId);
                 if (!buf) continue;
-
-                passEncoder.drawIndexed(buf.indices.length, 1, 0, 0, instanceIndex);
+                passEncoder.setVertexBuffer(0, buf.vertexBuffer);
+                const indexFormat: GPUIndexFormat = buf.indices instanceof Uint16Array ? 'uint16' : 'uint32';
+                passEncoder.setIndexBuffer(buf.indexBuffer, indexFormat);
+                passEncoder.drawIndexed(buf.indices.length, batch.count, 0, 0, batch.base);
+                objIndex += batch.count;
             }
 
             passEncoder.end();
@@ -285,80 +257,78 @@ export class WebGPUView extends BaseView {
         this.objectBuffers.set(meshId, { vertexBuffer, indexBuffer, indices: i });
     }
 
-    private updateObjectStorageBufferPartial(objects: SceneObject[]): void {
-        if (!this.device) throw new Error('Device not initialized');
-        const objectCount = objects.length;
-        if (objectCount > this.maxObjects || !this.objectStorageBuffer) {
-            throw new Error(`Object count ${objectCount} exceeds max of ${this.maxObjects}`);
-        }
-
-        const allObjectMatricesBuffer = new Float32Array(objectCount * 16);
-        for (let i = 0; i < objects.length; i++) {
-            const obj = objects[i];
-            const translation = [obj.position[0], obj.position[1], obj.position[2]];
-            const scale = [obj.scale[0], obj.scale[1], obj.scale[2]];
-            const matrix = M.mat4Transpose(M.mat4TRS(translation, obj.rotation, scale));
-            allObjectMatricesBuffer.set(matrix, i * 16);
-        }
-        this.device.queue.writeBuffer(this.objectStorageBuffer!, 0, allObjectMatricesBuffer.buffer, 0, objectCount * 16 * 4);
-    }
 
     private updateObjectStorageBufferWithSeparation(staticObjects: SceneObject[], nonStaticObjects: SceneObject[]): void {
         if (!this.device) throw new Error('Device not initialized');
         const totalObjectCount = staticObjects.length + nonStaticObjects.length;
-        
+        // Ensure storage buffer is large enough; if we recreated it we must also rebuild the bind group
+        let recreated = false;
         if (totalObjectCount > this.maxObjects || !this.objectStorageBuffer) {
             this.maxObjects = Math.max(totalObjectCount, this.maxObjects);
             this.objectStorageBuffer?.destroy();
             this.objectStorageBuffer = this.device.createBuffer({ size: 64 * this.maxObjects, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST });
+            recreated = true;
         }
 
-        const allObjectMatricesBuffer = new Float32Array(totalObjectCount * 16);
-        let index = 0;
+        const all = this.buildBatchesAndMatrixBuffer(staticObjects, nonStaticObjects);
+        this.device.queue.writeBuffer(this.objectStorageBuffer!, 0, all.buffer, 0, all.byteLength);
 
-        // First, write static objects
-        for (let i = 0; i < staticObjects.length; i++) {
-            const obj = staticObjects[i];
-            const translation = [obj.position[0], obj.position[1], obj.position[2]];
-            const scale = [obj.scale[0], obj.scale[1], obj.scale[2]];
-            const matrix = M.mat4Transpose(M.mat4TRS(translation, obj.rotation, scale));
-            allObjectMatricesBuffer.set(matrix, index * 16);
-            index++;
+        if (recreated) {
+            // rebuild bind group to reference the new buffer
+            const bindGroupLayout = this.renderPipeline!.getBindGroupLayout(0);
+            this.bindGroup = this.device.createBindGroup({ layout: bindGroupLayout, entries: [
+                { binding: 0, resource: { buffer: this.objectStorageBuffer! } },
+                { binding: 1, resource: { buffer: this.cameraBuffer! } },
+                { binding: 2, resource: { buffer: this.projectionBuffer! } },
+            ] });
         }
-
-        // Then, write non-static objects after static ones
-        for (let i = 0; i < nonStaticObjects.length; i++) {
-            const obj = nonStaticObjects[i];
-            const translation = [obj.position[0], obj.position[1], obj.position[2]];
-            const scale = [obj.scale[0], obj.scale[1], obj.scale[2]];
-            const matrix = M.mat4Transpose(M.mat4TRS(translation, obj.rotation, scale));
-            allObjectMatricesBuffer.set(matrix, index * 16);
-            index++;
-        }
-
-        this.device.queue.writeBuffer(this.objectStorageBuffer!, 0, allObjectMatricesBuffer.buffer, 0, totalObjectCount * 16 * 4);
     }
 
     private updateNonStaticObjectsOnly(nonStaticObjects: SceneObject[]): void {
-        if (!this.device || !this.objectStorageBuffer) throw new Error('Device or buffer not initialized');
-        
-        const nonStaticMatricesBuffer = new Float32Array(nonStaticObjects.length * 16);
-        for (let i = 0; i < nonStaticObjects.length; i++) {
-            const obj = nonStaticObjects[i];
-            const translation = [obj.position[0], obj.position[1], obj.position[2]];
-            const scale = [obj.scale[0], obj.scale[1], obj.scale[2]];
-            const matrix = M.mat4Transpose(M.mat4TRS(translation, obj.rotation, scale));
-            nonStaticMatricesBuffer.set(matrix, i * 16);
-        }
+        if (!this.device) throw new Error('Device not initialized');
 
-        // Write only to the non-static portion of the buffer (after static objects)
-        const bufferOffset = this.staticObjectCount * 64; // 64 bytes per matrix (16 floats * 4 bytes)
-        this.device.queue.writeBuffer(
-            this.objectStorageBuffer,
-            bufferOffset,
-            nonStaticMatricesBuffer.buffer,
-            0,
-            nonStaticObjects.length * 16 * 4
-        );
+        // Rebuild full buffer since batches depend on mesh ids and ordering
+        const all = this.buildBatchesAndMatrixBuffer(this.staticSceneObjects, nonStaticObjects);
+        if (!this.objectStorageBuffer) {
+            this.maxObjects = Math.max(this.maxObjects, (this.staticSceneObjects.length + nonStaticObjects.length));
+            this.objectStorageBuffer = this.device.createBuffer({ size: 64 * this.maxObjects, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST });
+            // rebuild bind group
+            const bindGroupLayout = this.renderPipeline!.getBindGroupLayout(0);
+            this.bindGroup = this.device.createBindGroup({ layout: bindGroupLayout, entries: [
+                { binding: 0, resource: { buffer: this.objectStorageBuffer! } },
+                { binding: 1, resource: { buffer: this.cameraBuffer! } },
+                { binding: 2, resource: { buffer: this.projectionBuffer! } },
+            ] });
+        }
+        this.device.queue.writeBuffer(this.objectStorageBuffer!, 0, all.buffer, 0, all.byteLength);
+    }
+
+    private buildBatchesAndMatrixBuffer(staticObjs: SceneObject[], nonStaticObjs: SceneObject[]) {
+        const groups = new Map<string, SceneObject[]>();
+        const push = (o: SceneObject) => {
+            const id = o.props.mesh!;
+            if (!groups.has(id)) groups.set(id, []);
+            groups.get(id)!.push(o);
+        };
+        staticObjs.forEach(push);
+        nonStaticObjs.forEach(push);
+
+        const total = staticObjs.length + nonStaticObjs.length;
+        const out = new Float32Array(total * 16);
+        this.meshBatches.clear();
+
+        let cursor = 0;
+        for (const [meshId, arr] of groups) {
+            this.meshBatches.set(meshId, { base: cursor, count: arr.length });
+            for (let i = 0; i < arr.length; i++) {
+                const o = arr[i];
+                const t = [o.position[0], o.position[1], o.position[2]];
+                const s = [o.scale[0], o.scale[1], o.scale[2]];
+                const m = M.mat4Transpose(M.mat4TRS(t, o.rotation, s));
+                out.set(m, (cursor + i) * 16);
+            }
+            cursor += arr.length;
+        }
+        return out;
     }
 }
