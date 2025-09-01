@@ -10,12 +10,6 @@ const mockMesh: Mesh = {
     indices: new Uint16Array([0, 1, 2])
 };
 
-const mockLODMesh: Mesh = {
-    id: 'builtin-lod-mesh',
-    vertices: new Float32Array([0, 0, 0]),
-    indices: new Uint16Array([0])
-};
-
 describe('MeshComponent', () => {
     it('should create mesh component with correct properties', () => {
         const component = new MeshComponent(mockMesh, true);

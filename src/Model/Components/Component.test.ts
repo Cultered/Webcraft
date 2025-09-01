@@ -12,11 +12,11 @@ class TestComponent implements Component {
         this.name = name;
     }
 
-    start(entity: Entity) {
+    start(_entity: Entity) {
         return this.startResult;
     }
 
-    update(entity: Entity, deltaMs?: number) {
+    update(_entity: Entity, _deltaMs?: number) {
         return this.updateResult;
     }
 }
@@ -51,7 +51,7 @@ describe('Component Interface', () => {
         
         // Component should implement required start method
         expect(typeof component.start).toBe('function');
-        expect(component.update).toBeUndefined(); // Optional method
+        expect((component as any).update).toBeUndefined(); // Optional method
         
         // Start method should work
         const result = component.start(entity);

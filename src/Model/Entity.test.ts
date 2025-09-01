@@ -9,12 +9,12 @@ class MockComponent implements Component {
     updateCalled = false;
     updateReturnValue: any = 'update-result';
 
-    start(entity: Entity) {
+    start(_entity: Entity) {
         this.startCalled = true;
-        return entity;
+        return _entity;
     }
 
-    update(entity: Entity, deltaMs?: number) {
+    update(_entity: Entity, _deltaMs?: number) {
         this.updateCalled = true;
         return this.updateReturnValue;
     }
@@ -25,12 +25,12 @@ class MockComponent2 implements Component {
     updateCalled = false;
     updateReturnValue: any = 'update-result';
 
-    start(entity: Entity) {
+    start(_entity: Entity) {
         this.startCalled = true;
-        return entity;
+        return _entity;
     }
 
-    update(entity: Entity, deltaMs?: number) {
+    update(_entity: Entity, _deltaMs?: number) {
         this.updateCalled = true;
         return this.updateReturnValue;
     }

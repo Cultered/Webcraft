@@ -217,10 +217,10 @@ describe('Model', () => {
 
     describe('Scene Object Generation', () => {
         it('should get objects without camera (fallback mode)', () => {
-            const entity1 = model.addEntity('entity-1', {
+            model.addEntity('entity-1', {
                 position: new Float32Array([1, 2, 3, 1]) as V.Vector4
             });
-            const entity2 = model.addEntity('entity-2', {
+            model.addEntity('entity-2', {
                 position: new Float32Array([4, 5, 6, 1]) as V.Vector4
             });
             
@@ -285,7 +285,7 @@ describe('Model', () => {
         });
 
         it('should handle entities without update methods', () => {
-            const entity = model.addEntity('static-entity');
+            model.addEntity('static-entity');
             // No components with update methods
             
             expect(() => model.update(16)).not.toThrow();
@@ -309,7 +309,7 @@ describe('Model', () => {
             expect(sceneObject!.position).toBe(position);
             expect(sceneObject!.rotation).toBe(rotation);
             expect(sceneObject!.scale).toBe(scale);
-            expect(sceneObject!.props.customProp).toBe('test-value');
+            expect((sceneObject!.props as any).customProp).toBe('test-value');
         });
     });
 
