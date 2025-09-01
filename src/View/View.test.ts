@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import View from './View';
+import View, { WebGLView } from './View';
 
 // Mock WebGL2RenderingContext since it's not available in Node.js test environment
 const mockWebGL2Context = {
@@ -44,9 +44,11 @@ const mockCanvas = {
 
 describe('View WebGL Integration', () => {
     let view: View;
+    let webglView: WebGLView;
 
     beforeEach(() => {
         view = new View();
+        webglView = new WebGLView();
         vi.clearAllMocks();
     });
 
@@ -67,10 +69,8 @@ describe('View WebGL Integration', () => {
         // The render method should now try to use WebGL instead of WebGPU
     });
 
-    it('should have renderGL method', () => {
-        // We can't directly access private methods, but we can verify the class structure
-        expect(view).toBeDefined();
-        // The render method should delegate to renderGL when WebGPU backend is disabled
+    it('should have render method', () => {
+        expect(typeof view.render).toBe('function');
     });
 
     it('should handle WebGL initialization gracefully when WebGL is not available', () => {
@@ -78,7 +78,7 @@ describe('View WebGL Integration', () => {
         
         // This should not throw an error even if WebGL is not available
         expect(() => {
-            view.initWebGL(mockCanvas);
+            webglView.init(mockCanvas);
         }).not.toThrow();
     });
 
@@ -92,7 +92,7 @@ describe('View WebGL Integration', () => {
         mockWebGL2Context.createVertexArray.mockReturnValue({});
 
         expect(() => {
-            view.initWebGL(mockCanvas);
+            webglView.init(mockCanvas);
         }).not.toThrow();
 
         expect(mockCanvas.getContext).toHaveBeenCalledWith('webgl2', {
