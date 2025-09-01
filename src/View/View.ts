@@ -16,8 +16,14 @@ export function createView(useWebGPU: boolean = true): BaseView {
 }
 
 /**
- * Legacy View class that maintains backward compatibility
- * @deprecated Use createView() factory function instead
+ * Legacy View class that maintains backward compatibility with existing code.
+ * 
+ * This class acts as a wrapper around the new WebGLView and WebGPUView implementations,
+ * allowing existing code to continue working without changes while internally using
+ * the cleaner, separated architecture.
+ * 
+ * @deprecated For new code, consider using createView() factory function or directly
+ * instantiating WebGLView/WebGPUView classes for better type safety and clarity.
  */
 class View {
     private viewImpl: BaseView;

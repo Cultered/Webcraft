@@ -6,7 +6,19 @@ import { ShowWebGPUInstructions } from '../misc/misc';
 import * as M from '../misc/Matrix4x4';
 
 /**
- * WebGPU-based rendering implementation
+ * WebGPU-based rendering implementation.
+ * 
+ * This class provides a modern, efficient implementation using the WebGPU API.
+ * It leverages compute shaders, storage buffers, and advanced GPU features
+ * for high-performance rendering of large numbers of objects.
+ * 
+ * Features:
+ * - WebGPU context initialization with high-performance adapter
+ * - Storage buffer-based object matrix management
+ * - Efficient instanced rendering
+ * - Automatic resource management and cleanup
+ * - Modern shader pipeline with WGSL
+ * - Debug information display
  */
 export class WebGPUView extends BaseView {
     // WebGPU properties
@@ -20,6 +32,12 @@ export class WebGPUView extends BaseView {
     private cameraBuffer?: GPUBuffer;
     private projectionBuffer?: GPUBuffer;
 
+    /**
+     * Initialize WebGPU context and set up rendering pipeline.
+     * 
+     * @param canvas - HTML canvas element to render to
+     * @returns Promise that resolves to WebGPU initialization objects or undefined if WebGPU is unavailable
+     */
     public async init(canvas: HTMLCanvasElement): Promise<readonly [GPUAdapter, GPUDevice, HTMLCanvasElement, GPUCanvasContext, GPUTextureFormat] | undefined> {
         try {
             const adapter = await navigator.gpu.requestAdapter({ powerPreference: 'high-performance' });
@@ -154,6 +172,12 @@ export class WebGPUView extends BaseView {
         if (this.device) this.createBuffersForMesh(meshId);
     }
 
+    /**
+     * Render the current scene using WebGPU.
+     * 
+     * This method uses modern WebGPU features including storage buffers for object
+     * matrices and efficient command buffer recording for high-performance rendering.
+     */
     public render(): void {
         if (!this.device || !this.context || !this.renderPipeline || !this.depthTexture || !this.bindGroup) {
             console.warn('Render skipped: device/context/pipeline not ready');

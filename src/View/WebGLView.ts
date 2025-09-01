@@ -5,7 +5,18 @@ import type { Mesh } from '../Types/Mesh';
 import * as M from '../misc/Matrix4x4';
 
 /**
- * WebGL-based rendering implementation
+ * WebGL-based rendering implementation.
+ * 
+ * This class provides a clean, focused implementation for WebGL 2.0 rendering.
+ * It handles shader compilation, buffer management, and rendering operations
+ * specific to the WebGL API.
+ * 
+ * Features:
+ * - WebGL 2.0 context initialization with optimal settings
+ * - Efficient batch rendering with minimal state changes
+ * - Automatic mesh buffer management
+ * - Per-object matrix transformations
+ * - Debug information display
  */
 export class WebGLView extends BaseView {
     // WebGL properties
@@ -19,6 +30,11 @@ export class WebGLView extends BaseView {
     } = {};
     private glVertexArray?: WebGLVertexArrayObject;
 
+    /**
+     * Initialize WebGL 2.0 context and set up rendering pipeline.
+     * 
+     * @param canvas - HTML canvas element to render to
+     */
     public async init(canvas: HTMLCanvasElement): Promise<void> {
         try {
             const gl = canvas.getContext('webgl2', { 
@@ -133,6 +149,12 @@ export class WebGLView extends BaseView {
         if (this.gl) this.createWebGLBuffersForMesh(meshId);
     }
 
+    /**
+     * Render the current scene using WebGL.
+     * 
+     * This method performs batched rendering, grouping objects by mesh to minimize
+     * state changes while updating per-object transforms for each draw call.
+     */
     public render(): void {
         if (!this.gl || !this.glProgram || !this.glVertexArray) {
             console.warn('WebGL render skipped: context/program not ready');
