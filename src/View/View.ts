@@ -5,7 +5,6 @@ import * as M from '../misc/Matrix4x4';
 import type { SceneObject } from '../Types/SceneObject';
 import type { Mesh } from '../Types/Mesh';
 import type { LightingData } from '../Types/Light';
-import { ShowWebGPUInstructions } from '../misc/misc';
 
 class View {
     // WebGPU properties
@@ -69,9 +68,15 @@ class View {
     public async init(canvas: HTMLCanvasElement, useWebGPU: boolean = true) {
         this.setWebGPUBackend(useWebGPU);
         if (useWebGPU) {
-            return await this.initWebGPU(canvas);
+            try {
+                return await this.initWebGPU(canvas);
+            } catch (error) {
+                console.warn('WebGPU initialization failed, falling back to WebGL:', error);
+                this.setWebGPUBackend(false);
+                return this.initWebGL(canvas);
+            }
         } else {
-            this.initWebGL(canvas);
+            return this.initWebGL(canvas);
         }
     }
 
@@ -196,7 +201,8 @@ class View {
 
             return [adapter, device, canvas, context, format] as const;
         } catch (error) {
-            ShowWebGPUInstructions()
+            // Don't show instructions here, let the init method handle fallback
+            throw error;
         }
     }
 

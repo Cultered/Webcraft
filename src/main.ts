@@ -4,6 +4,7 @@ import MeshComponent from './Model/Components/MeshComponent';
 import { Entity } from './Model/Entity';
 import { generateSphereMesh, generateCubeMesh, LOD_MESH } from './Types/Mesh';
 import type { Vector4 } from './misc/Vector4';
+import type { DirectLight, PointLight } from './Types/Light';
 import { setupDebugElement } from './misc/setupDebugElement';
 import { setUpCanvas } from './misc/setUpCanvas';
 import * as M from './misc/Matrix4x4';
@@ -31,6 +32,33 @@ if (!document.querySelector('#app')) {
     view.setDebugElement(debugEl);
 
     model.addCamera('main-camera', new Float32Array([0, 0, 0, 0]) as Vector4, M.mat4Rotation(0, Math.PI, 0));
+    
+    // Add lighting to the scene
+    const sunLight: DirectLight = {
+        id: 'sun',
+        direction: new Float32Array([0.3, -1, 0.5, 0]) as Vector4, // Coming from top-left-front
+        color: new Float32Array([1.0, 0.95, 0.8, 0.8]) as Vector4, // Warm sunlight
+        enabled: true
+    };
+    model.addDirectLight(sunLight);
+
+    const torchLight: PointLight = {
+        id: 'torch',
+        position: new Float32Array([10, 10, 10, 1]) as Vector4,
+        color: new Float32Array([1.0, 0.6, 0.2, 1.2]) as Vector4, // Orange flickering light
+        radius: 20,
+        enabled: true
+    };
+    model.addPointLight(torchLight);
+
+    const blueLight: PointLight = {
+        id: 'blue-accent',
+        position: new Float32Array([-15, 5, -15, 1]) as Vector4,
+        color: new Float32Array([0.2, 0.4, 1.0, 0.6]) as Vector4, // Cool blue light
+        radius: 15,
+        enabled: true
+    };
+    model.addPointLight(blueLight);
     const sphereMesh = { id: 'builtin-sphere', ...generateSphereMesh(3, 1) };
     const cubeMesh = { id: 'builtin-cube', ...generateCubeMesh(1) };
     view.uploadMeshToGPU(sphereMesh.id, sphereMesh.vertices, sphereMesh.indices);
@@ -71,6 +99,19 @@ if (!document.querySelector('#app')) {
         if (!mainCam) { console.error("No main camera"); return }
         view.registerCamera(mainCam);
         times['registerCamera'] = performance.now() - t1;
+
+        const t1_5 = performance.now();
+        
+        // Animate the torch light position
+        const time = performance.now() * 0.001; // Convert to seconds
+        const torchLightObj = model.getPointLight('torch');
+        if (torchLightObj) {
+            torchLightObj.position[0] = 10 + Math.sin(time) * 5;
+            torchLightObj.position[2] = 10 + Math.cos(time) * 5;
+        }
+        
+        view.updateLighting(model.getLightingData());
+        times['updateLighting'] = performance.now() - t1_5;
 
         const t2 = performance.now();
         view.render();
