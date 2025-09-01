@@ -5,18 +5,10 @@ import * as M from '../misc/mat4';
 import { Entity } from './Entity';
 import MeshComponent from './Components/MeshComponent';
 import type { Mesh } from '../Types/MeshType';
-import type { Optimizations } from '../Types/Optimizations';
 import type { SceneObject } from '../Types/SceneObject';
+import { o11s } from '../config/config';
 
-export const o11s: Optimizations = {
-    CPU_CHUNKS: true,
-    CHUNK_SIZE: 10,
-    RENDER_DISTANCE: 6,
-    LOD_DISTANCE: 3,
-    CPU_SOFT_FRUSTUM_CULLING: true,
-    CPU_LOD: true,
-    USE_WEBGPU:true
-}
+
 
 export default class Model {
     private entities: Map<string, Entity> = new Map();

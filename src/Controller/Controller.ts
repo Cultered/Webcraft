@@ -1,12 +1,11 @@
 import Model from '../Model/Model';
 import * as V from '../misc/vec4';
 import * as M from '../misc/mat4';
-
-type RenderFn = () => void;
+import { BaseView } from '../View/BaseView';
 
 export default class Controller {
   private model: Model;
-  private renderFn: RenderFn;
+  private view: BaseView;
   private keys: Set<string> = new Set();
   private mouseSensitivity = 0.0025; // radians per pixel
   private intervalId: number | null = null;
@@ -14,9 +13,9 @@ export default class Controller {
   private debugEl?: HTMLElement;
   private camId: string;
 
-  constructor(model: Model, renderFn: RenderFn, camId = 'main-camera') {
+  constructor(model: Model, view: BaseView, camId = 'main-camera') {
     this.model = model;
-    this.renderFn = renderFn;
+    this.view = view;
     this.camId = camId;
   }
 
@@ -112,10 +111,10 @@ export default class Controller {
       times['movement_ops'] = moveOps;
 
 
-      const t4 = performance.now();
-      // trigger rendering (render loop handles FPS/debug)
-      this.renderFn();
-      times['renderFn'] = performance.now() - t4;
+  const t4 = performance.now();
+  // trigger rendering (render loop handles FPS/debug)
+  this.renderLoop();
+  times['renderFn'] = performance.now() - t4;
 
       // print timing breakdown
       const total = Object.values(times).reduce((s, v) => s + v, 0);
@@ -127,6 +126,51 @@ export default class Controller {
       this.debugEl.innerText += out;
     }, 1000 / 60);
   }
+
+  // moved render loop from main.ts into controller so controller owns FPS/debug
+  private renderLoop = () => {
+    if (!this.debugEl) return;
+
+    const times: { [k: string]: number } = {};
+
+    const t0 = performance.now();
+    // update scene objects; non-blocking
+    this.view.registerSceneObjects(this.model.getObjects(), false).catch(err => console.error('registerSceneObjects failed', err));
+    times['registerSceneObjects'] = performance.now() - t0;
+
+    const t1 = performance.now();
+    const mainCam = this.model.getCamera(this.camId);
+    if (!mainCam) { console.error("No main camera"); return }
+    this.view.registerCamera(mainCam);
+    times['registerCamera'] = performance.now() - t1;
+
+    const t2 = performance.now();
+    this.view.render();
+    times['view.render'] = performance.now() - t2;
+
+    if (!(this.renderLoop as any).hasOwnProperty('lastTime')) {
+      (this.renderLoop as any).lastTime = performance.now();
+      (this.renderLoop as any).frameCount = 0;
+      (this.renderLoop as any).fps = 0;
+    }
+    (this.renderLoop as any).frameCount++;
+    const now = performance.now();
+    const lastTime = (this.renderLoop as any).lastTime;
+    if (now - lastTime >= 1000) {
+      (this.renderLoop as any).fps = (this.renderLoop as any).frameCount;
+      (this.renderLoop as any).frameCount = 0;
+      (this.renderLoop as any).lastTime = now;
+    }
+    const fps = (this.renderLoop as any).fps;
+    this.debugEl.innerText += `\nFPS: ${fps}`;
+
+    const total = Object.values(times).reduce((s, v) => s + v, 0);
+    let out = `\nRender loop total: ${total.toFixed(2)} ms`;
+    for (const k of Object.keys(times)) {
+      out += `\n${k}: ${times[k].toFixed(2)} ms`;
+    }
+    this.debugEl.innerText += out + `\n`;
+  };
 
   stop() {
     if (this.intervalId !== null) {
