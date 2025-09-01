@@ -69,11 +69,11 @@ export class WebGPUView extends BaseView {
                 });
                 this.cameraBuffer = this.device.createBuffer({
                     size: 64,
-                    usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST
+                    usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
                 });
                 this.projectionBuffer = this.device.createBuffer({
                     size: 64,
-                    usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST
+                    usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
                 });
 
                 const initialProj = M.mat4Projection(this.fov, (canvas.width || window.innerWidth) / (canvas.height || window.innerHeight), this.near, this.far);
@@ -82,15 +82,17 @@ export class WebGPUView extends BaseView {
                 const bindGroupLayout = device.createBindGroupLayout({
                     entries: [
                         { binding: 0, visibility: GPUShaderStage.VERTEX, buffer: { type: 'read-only-storage' } },
-                        { binding: 1, visibility: GPUShaderStage.VERTEX, buffer: { type: 'read-only-storage' } },
-                        { binding: 2, visibility: GPUShaderStage.VERTEX, buffer: { type: 'read-only-storage' } },
+                        { binding: 1, visibility: GPUShaderStage.VERTEX, buffer: { type: 'uniform' } },
+                        { binding: 2, visibility: GPUShaderStage.VERTEX, buffer: { type: 'uniform' } },
                     ],
                 });
-                this.bindGroup = device.createBindGroup({ layout: bindGroupLayout, entries: [
-                    { binding: 0, resource: { buffer: this.objectStorageBuffer! } },
-                    { binding: 1, resource: { buffer: this.cameraBuffer! } },
-                    { binding: 2, resource: { buffer: this.projectionBuffer! } },
-                ] });
+                this.bindGroup = device.createBindGroup({
+                    layout: bindGroupLayout, entries: [
+                        { binding: 0, resource: { buffer: this.objectStorageBuffer! } },
+                        { binding: 1, resource: { buffer: this.cameraBuffer! } },
+                        { binding: 2, resource: { buffer: this.projectionBuffer! } },
+                    ]
+                });
 
                 const vertexBuffers = [{ attributes: [{ shaderLocation: 0, offset: 0, format: 'float32x3' }], arrayStride: 12, stepMode: 'vertex' }];
 
@@ -132,13 +134,9 @@ export class WebGPUView extends BaseView {
         }
     }
 
-    public async registerSceneObjects(objects: SceneObject[], updateVertices: boolean): Promise<void> {
+    public async registerSceneObjects(objects: SceneObject[]): Promise<void> {
         if (!this.device) throw new Error('WebGPU device not initialized');
-        
-        if (objects === this.lastSceneObjectsRef && !updateVertices) {
-            this.updateObjectStorageBufferPartial(objects);
-            return;
-        }
+
 
         this.sceneObjects = objects;
         this.lastSceneObjectsRef = objects;
@@ -155,7 +153,7 @@ export class WebGPUView extends BaseView {
         this.lastCameraKey = camKey;
 
         if (this.device && this.cameraBuffer) {
-            const camTransform = M.mat4Mul(new Float32Array(16),camera.rotation,M.mat4Translation(-camera.position[0],-camera.position[1],-camera.position[2]));
+            const camTransform = M.mat4Mul(new Float32Array(16), camera.rotation, M.mat4Translation(-camera.position[0], -camera.position[1], -camera.position[2]));
             this.device.queue.writeBuffer(this.cameraBuffer, 0, M.mat4Transpose(camTransform).buffer);
         }
     }
@@ -259,9 +257,7 @@ export class WebGPUView extends BaseView {
         if (!this.device) throw new Error('Device not initialized');
         const objectCount = objects.length;
         if (objectCount > this.maxObjects || !this.objectStorageBuffer) {
-            this.maxObjects = Math.max(objectCount, this.maxObjects);
-            this.objectStorageBuffer?.destroy();
-            this.objectStorageBuffer = this.device.createBuffer({ size: 64 * this.maxObjects, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST });
+            throw new Error(`Object count ${objectCount} exceeds max of ${this.maxObjects}`);
         }
 
         const allObjectMatricesBuffer = new Float32Array(objectCount * 16);
@@ -269,9 +265,9 @@ export class WebGPUView extends BaseView {
             const obj = objects[i];
             const translation = [obj.position[0], obj.position[1], obj.position[2]];
             const scale = [obj.scale[0], obj.scale[1], obj.scale[2]];
-            const matrix = M.mat4Transpose(M.mat4TRS(translation,obj.rotation,scale));
+            const matrix = M.mat4Transpose(M.mat4TRS(translation, obj.rotation, scale));
             allObjectMatricesBuffer.set(matrix, i * 16);
         }
-        this.device.queue.writeBuffer(this.objectStorageBuffer!, 0, allObjectMatricesBuffer .buffer, 0, objectCount * 16 * 4);
+        this.device.queue.writeBuffer(this.objectStorageBuffer!, 0, allObjectMatricesBuffer.buffer, 0, objectCount * 16 * 4);
     }
 }

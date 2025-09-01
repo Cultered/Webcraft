@@ -1,11 +1,10 @@
-export const vertexShader = `#version 300 es
+export const vertexShader = /*glsl*/`#version 300 es
 precision mediump float;
 
 // Vertex input
 in vec3 position;
 
-// Uniforms - we'll update these per draw call rather than using large arrays
-uniform mat4 objectMatrix; // Single model matrix per draw call
+uniform mat4 objectMatrix; 
 uniform mat4 cameraMatrix;
 uniform mat4 projectionMatrix;
 
@@ -21,7 +20,7 @@ void main() {
 }
 `;
 
-export const fragmentShader = `#version 300 es
+export const fragmentShader = /*glsl*/`#version 300 es
 precision mediump float;
 
 // Input from vertex shader

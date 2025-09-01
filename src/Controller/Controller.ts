@@ -135,7 +135,7 @@ export default class Controller {
 
     const t0 = performance.now();
     // update scene objects; non-blocking
-    this.view.registerSceneObjects(this.model.getObjects(), false).catch(err => console.error('registerSceneObjects failed', err));
+    this.view.registerSceneObjects(this.model.getObjects()).catch(err => console.error('registerSceneObjects failed', err));
     times['registerSceneObjects'] = performance.now() - t0;
 
     const t1 = performance.now();

@@ -3,9 +3,9 @@ import Model from './Model/Model';
 import MeshComponent from './Model/Components/MeshComponent';
 import { Entity } from './Model/Entity';
 import { generateSphereMesh, generateCubeMesh, LOD_MESH } from './Types/MeshUtils';
-import type { Vector4 } from './Types/Vector4';
 import { setupDebugElement } from './misc/setupDebugElement';
-import * as M from './misc/mat4';
+import * as M from './misc/mat4'
+import * as V from './misc/vec4';
 import Controller from './Controller/Controller';
 import Rotator from './Model/Components/Rotator';
 import { o11s } from './config/config';
@@ -28,7 +28,7 @@ if (!document.querySelector('#app')) {
     const debugEl = setupDebugElement()
     view.setDebugElement(debugEl);
 
-    model.addCamera('main-camera', new Float32Array([0, 0, 0, 0]) as Vector4, M.mat4Rotation(0, Math.PI, 0));
+    model.addCamera('main-camera', V.vec4(0,0,0), M.mat4Rotation(0, Math.PI, 0));
     const sphereMesh = { id: 'builtin-sphere', ...generateSphereMesh(3, 1) };
     const cubeMesh = { id: 'builtin-cube', ...generateCubeMesh(1) };
     view.uploadMeshToGPU(sphereMesh.id, sphereMesh.vertices, sphereMesh.indices);
@@ -37,11 +37,11 @@ if (!document.querySelector('#app')) {
 
     const sphereComponent = new MeshComponent(sphereMesh, true);
 
-    for (let i = 0; i < 50; i++) {
-        for (let j = 0; j < 50; j++) {
-            for (let k = 0; k < 50; k++) {
+    for (let i = 0; i < 30; i++) {
+        for (let j = 0; j < 30; j++) {
+            for (let k = 0; k < 30; k++) {
                 const id = `obj-${i}-${j}-${k}`;
-                const ent = new Entity(id, new Float32Array([i * 2, j * 2, k * 2, 0]) as Vector4, undefined, new Float32Array([0.1, 0.1, 0.1, 1]) as Vector4);
+                const ent = new Entity(id, V.vec4(i * 2, j * 2, k * 2), undefined, V.vec4(0.1, 0.1, 0.1, 1));
                 ent.addComponent(sphereComponent);
                 model.addExistingEntity(ent);
             }
@@ -50,7 +50,7 @@ if (!document.querySelector('#app')) {
 
     model.addComponentToEntity('obj-0-0-1', new Rotator(1.0, { x: 0, y: 1, z: 0 }));
 
-    await view.registerSceneObjects(model.getObjects(), true);
+    await view.registerSceneObjects(model.getObjects());
 
     const canvasEl = document.querySelector('#main-canvas') as HTMLCanvasElement;
     const controller = new Controller(model, view);
