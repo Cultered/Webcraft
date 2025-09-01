@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import View, { WebGLView } from './View';
+import {createView, WebGLView } from './View';
 
 // Mock WebGL2RenderingContext since it's not available in Node.js test environment
 const mockWebGL2Context = {
@@ -43,11 +43,11 @@ const mockCanvas = {
 } as any;
 
 describe('View WebGL Integration', () => {
-    let view: View;
+    let view: WebGLView;
     let webglView: WebGLView;
 
     beforeEach(() => {
-        view = new View();
+        view = createView(false) as WebGLView; // Create WebGL view
         webglView = new WebGLView();
         vi.clearAllMocks();
     });
@@ -58,15 +58,6 @@ describe('View WebGL Integration', () => {
 
     it('should have init method that accepts useWebGPU parameter', () => {
         expect(typeof view.init).toBe('function');
-    });
-
-    it('should set WebGPU backend correctly', () => {
-        view.setWebGPUBackend(true);
-        // We can't easily test private properties, but we can verify the method exists
-        expect(typeof view.setWebGPUBackend).toBe('function');
-        
-        view.setWebGPUBackend(false);
-        // The render method should now try to use WebGL instead of WebGPU
     });
 
     it('should have render method', () => {

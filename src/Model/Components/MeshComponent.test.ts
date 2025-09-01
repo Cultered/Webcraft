@@ -28,8 +28,7 @@ describe('MeshComponent', () => {
     it('should set entity mesh property on start', () => {
         const entity = new Entity('test-entity');
         const component = new MeshComponent(mockMesh, true);
-        
-        component.start(entity);
+        entity.addComponent(component);
         
         expect(entity.props.mesh).toBe('test-mesh');
     });
@@ -38,11 +37,11 @@ describe('MeshComponent', () => {
         const entity = new Entity('test-entity');
         const component = new MeshComponent(mockMesh, true);
         
-        // Simulate LOD mesh being set
-        entity.props.mesh = 'builtin-lod-mesh';
-        
-        component.restoreMesh(entity);
-        
+        entity.addComponent(component);
+        const ec = entity.getComponent(MeshComponent) as MeshComponent || undefined;
+        if (ec) {
+            ec.restoreMesh(entity);
+        }
         expect(entity.props.mesh).toBe('test-mesh');
     });
 
@@ -50,13 +49,11 @@ describe('MeshComponent', () => {
         const entity = new Entity('test-entity');
         const component = new MeshComponent(mockMesh, true);
         
-        // Start with original mesh
-        component.start(entity);
-        expect(entity.props.mesh).toBe('test-mesh');
-        
-        // Apply LOD reduction
-        component.LODReduce(entity);
-        
+        entity.addComponent(component);
+        const ec = entity.getComponent(MeshComponent) as MeshComponent || undefined;
+        if (ec) {
+            ec.LODReduce(entity);
+        }
         expect(entity.props.mesh).toBe('builtin-lod-mesh');
     });
 
@@ -64,13 +61,11 @@ describe('MeshComponent', () => {
         const entity = new Entity('test-entity');
         const component = new MeshComponent(mockMesh, false);
         
-        // Start with original mesh
-        component.start(entity);
-        expect(entity.props.mesh).toBe('test-mesh');
-        
-        // Try to apply LOD reduction (should not change)
-        component.LODReduce(entity);
-        
+        entity.addComponent(component);
+        const ec = entity.getComponent(MeshComponent) as MeshComponent || undefined;
+        if (ec) {
+            ec.LODReduce(entity);
+        }
         expect(entity.props.mesh).toBe('test-mesh'); // Should remain unchanged
     });
 

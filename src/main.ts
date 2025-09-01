@@ -1,4 +1,4 @@
-import View from './View/View';
+import {createView} from './View/View';
 import Model from './Model/Model';
 import MeshComponent from './Model/Components/MeshComponent';
 import { Entity } from './Model/Entity';
@@ -20,12 +20,12 @@ if (!document.querySelector('#app')) {
 }
 
 (async () => {
-    const view = new View();
+    const view = createView(o11s.USE_WEBGPU);
     const model = new Model();
 
 
 
-    await view.init(setUpCanvas(), o11s.USE_WEBGPU);
+    await view.init(setUpCanvas());
 
     const debugEl = setupDebugElement()
     view.setDebugElement(debugEl);
