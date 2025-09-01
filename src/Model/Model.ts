@@ -7,6 +7,7 @@ import MeshComponent from './Components/MeshComponent';
 import type { Mesh } from '../Types/Mesh';
 import type { Optimizations } from '../Types/Optimizations';
 import type { SceneObject } from '../Types/SceneObject';
+import type { DirectLight, PointLight, LightingData } from '../Types/Light';
 
 export const o11s: Optimizations = {
     CPU_CHUNKS: true,
@@ -25,6 +26,10 @@ export default class Model {
     private cachedVisibleObjects: string[] = [];
     private lastCameraChunkKey?: string;
     public onSceneObjectsUpdated?: (objects: SceneObject[], updateVertices: boolean) => void;
+    
+    // Lighting system
+    private directLights: Map<string, DirectLight> = new Map();
+    private pointLights: Map<string, PointLight> = new Map();
 
     getMesh(id: string) {
         for (const e of this.entities.values()) {
@@ -221,5 +226,37 @@ export default class Model {
 
     getEntityById(id: string) {
         return this.entities.get(id);
+    }
+
+    // Lighting management methods
+    addDirectLight(light: DirectLight): void {
+        this.directLights.set(light.id, light);
+    }
+
+    addPointLight(light: PointLight): void {
+        this.pointLights.set(light.id, light);
+    }
+
+    removeDirectLight(id: string): boolean {
+        return this.directLights.delete(id);
+    }
+
+    removePointLight(id: string): boolean {
+        return this.pointLights.delete(id);
+    }
+
+    getDirectLight(id: string): DirectLight | undefined {
+        return this.directLights.get(id);
+    }
+
+    getPointLight(id: string): PointLight | undefined {
+        return this.pointLights.get(id);
+    }
+
+    getLightingData(): LightingData {
+        return {
+            directLights: Array.from(this.directLights.values()).filter(light => light.enabled),
+            pointLights: Array.from(this.pointLights.values()).filter(light => light.enabled)
+        };
     }
 }

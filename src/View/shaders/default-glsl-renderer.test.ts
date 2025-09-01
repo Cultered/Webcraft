@@ -10,24 +10,30 @@ describe('GLSL Shader Tests', () => {
         expect(vertexShader).toContain('uniform mat4 cameraMatrix');
         expect(vertexShader).toContain('uniform mat4 projectionMatrix');
         expect(vertexShader).toContain('out vec4 fragPosition');
-        expect(vertexShader).toContain('gl_Position = projectionMatrix * cameraMatrix * objectMatrix * pos4');
+        expect(vertexShader).toContain('out vec4 worldPosition');
+        expect(vertexShader).toContain('gl_Position = projectionMatrix * cameraMatrix * worldPosition');
     });
 
-    it('should export fragment shader with correct structure', () => {
+    it('should export fragment shader with lighting support', () => {
         expect(fragmentShader).toBeDefined();
         expect(fragmentShader).toContain('#version 300 es');
         expect(fragmentShader).toContain('in vec4 fragPosition');
+        expect(fragmentShader).toContain('in vec4 worldPosition');
         expect(fragmentShader).toContain('out vec4 outColor');
-        expect(fragmentShader).toContain('0.5 + 0.5 * fragPosition.x');
-        expect(fragmentShader).toContain('0.5 + 0.5 * fragPosition.y');
-        expect(fragmentShader).toContain('0.5 + 0.5 * fragPosition.z');
+        
+        // Check for lighting uniforms
+        expect(fragmentShader).toContain('uniform int numDirectLights');
+        expect(fragmentShader).toContain('uniform int numPointLights');
+        expect(fragmentShader).toContain('uniform vec4 directLightDirections');
+        expect(fragmentShader).toContain('uniform vec4 pointLightPositions');
     });
 
-    it('should have similar coloring logic to WGSL version', () => {
-        // Verify that the fragment shader produces colors based on world position
-        // This ensures feature parity with the WGSL shader
-        expect(fragmentShader).toContain('vec4 color = vec4(');
-        expect(fragmentShader).toContain('0.5 + 0.5 * fragPosition');
-        expect(fragmentShader).toContain('outColor = color');
+    it('should have lighting calculation logic', () => {
+        // Verify that the fragment shader calculates lighting
+        expect(fragmentShader).toContain('normalize(cross(dFdxPos, dFdyPos))'); // Normal calculation
+        expect(fragmentShader).toContain('ambientStrength'); // Ambient lighting
+        expect(fragmentShader).toContain('totalLighting'); // Light accumulation
+        expect(fragmentShader).toContain('finalColor'); // Final color calculation
+        expect(fragmentShader).toContain('outColor = vec4(finalColor, 1.0)');
     });
 });

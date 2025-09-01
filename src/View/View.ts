@@ -4,6 +4,7 @@ import type { Vector4 } from '../misc/Vector4';
 import * as M from '../misc/Matrix4x4';
 import type { SceneObject } from '../Types/SceneObject';
 import type { Mesh } from '../Types/Mesh';
+import type { LightingData } from '../Types/Light';
 import { ShowWebGPUInstructions } from '../misc/misc';
 
 class View {
@@ -19,6 +20,9 @@ class View {
     private objectStorageBuffer?: GPUBuffer;
     private cameraBuffer?: GPUBuffer;
     private projectionBuffer?: GPUBuffer;
+    private directLightsBuffer?: GPUBuffer;
+    private pointLightsBuffer?: GPUBuffer;
+    private lightingConfigBuffer?: GPUBuffer;
     
     // WebGL properties
     private gl?: WebGL2RenderingContext;
@@ -28,6 +32,14 @@ class View {
         objectMatrix?: WebGLUniformLocation | null;
         cameraMatrix?: WebGLUniformLocation | null;
         projectionMatrix?: WebGLUniformLocation | null;
+        // Lighting uniforms
+        numDirectLights?: WebGLUniformLocation | null;
+        numPointLights?: WebGLUniformLocation | null;
+        directLightDirections?: WebGLUniformLocation | null;
+        directLightColors?: WebGLUniformLocation | null;
+        pointLightPositions?: WebGLUniformLocation | null;
+        pointLightColors?: WebGLUniformLocation | null;
+        pointLightRadii?: WebGLUniformLocation | null;
     } = {};
     private glVertexArray?: WebGLVertexArrayObject;
     
@@ -41,6 +53,11 @@ class View {
     private sceneObjects: SceneObject[] = [];
     private lastSceneObjectsRef?: SceneObject[];
     private lastCameraKey?: string;
+    
+    // Lighting
+    private currentLightingData: LightingData = { directLights: [], pointLights: [] };
+    public maxDirectLights = 8;
+    public maxPointLights = 32;
     private camera: SceneObject = {
         id: 'viewCamera',
         position: new Float32Array([0, 0, 0, 1]) as Vector4,
@@ -102,6 +119,25 @@ class View {
                     usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST
                 });
 
+                // Create lighting buffers
+                // DirectLight: vec4 direction, vec4 color (8 vec4s = 8 * 16 = 128 bytes per light)
+                this.directLightsBuffer = this.device.createBuffer({
+                    size: this.maxDirectLights * 32, // direction(16) + color(16) per light
+                    usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST
+                });
+
+                // PointLight: vec4 position, vec4 color, float radius + padding (3 vec4s = 48 bytes per light)  
+                this.pointLightsBuffer = this.device.createBuffer({
+                    size: this.maxPointLights * 48, // position(16) + color(16) + radius+padding(16) per light
+                    usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST
+                });
+
+                // Lighting config: numDirectLights, numPointLights + padding (16 bytes)
+                this.lightingConfigBuffer = this.device.createBuffer({
+                    size: 16,
+                    usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST
+                });
+
                 const initialProj = M.mat4Projection(this.fov, (canvas.width || window.innerWidth) / (canvas.height || window.innerHeight), this.near, this.far);
                 this.device.queue.writeBuffer(this.projectionBuffer, 0, (initialProj).buffer);
 
@@ -110,12 +146,18 @@ class View {
                         { binding: 0, visibility: GPUShaderStage.VERTEX, buffer: { type: 'read-only-storage' } },
                         { binding: 1, visibility: GPUShaderStage.VERTEX, buffer: { type: 'read-only-storage' } },
                         { binding: 2, visibility: GPUShaderStage.VERTEX, buffer: { type: 'read-only-storage' } },
+                        { binding: 3, visibility: GPUShaderStage.FRAGMENT, buffer: { type: 'read-only-storage' } },
+                        { binding: 4, visibility: GPUShaderStage.FRAGMENT, buffer: { type: 'read-only-storage' } },
+                        { binding: 5, visibility: GPUShaderStage.FRAGMENT, buffer: { type: 'read-only-storage' } },
                     ],
                 });
                 this.bindGroup = device.createBindGroup({ layout: bindGroupLayout, entries: [
                     { binding: 0, resource: { buffer: this.objectStorageBuffer! } },
                     { binding: 1, resource: { buffer: this.cameraBuffer! } },
                     { binding: 2, resource: { buffer: this.projectionBuffer! } },
+                    { binding: 3, resource: { buffer: this.directLightsBuffer! } },
+                    { binding: 4, resource: { buffer: this.pointLightsBuffer! } },
+                    { binding: 5, resource: { buffer: this.lightingConfigBuffer! } },
                 ] });
 
                 const vertexBuffers = [{ attributes: [{ shaderLocation: 0, offset: 0, format: 'float32x3' }], arrayStride: 12, stepMode: 'vertex' }];
@@ -188,6 +230,15 @@ class View {
             this.glUniforms.objectMatrix = gl.getUniformLocation(this.glProgram, 'objectMatrix');
             this.glUniforms.cameraMatrix = gl.getUniformLocation(this.glProgram, 'cameraMatrix');
             this.glUniforms.projectionMatrix = gl.getUniformLocation(this.glProgram, 'projectionMatrix');
+            
+            // Get lighting uniform locations
+            this.glUniforms.numDirectLights = gl.getUniformLocation(this.glProgram, 'numDirectLights');
+            this.glUniforms.numPointLights = gl.getUniformLocation(this.glProgram, 'numPointLights');
+            this.glUniforms.directLightDirections = gl.getUniformLocation(this.glProgram, 'directLightDirections');
+            this.glUniforms.directLightColors = gl.getUniformLocation(this.glProgram, 'directLightColors');
+            this.glUniforms.pointLightPositions = gl.getUniformLocation(this.glProgram, 'pointLightPositions');
+            this.glUniforms.pointLightColors = gl.getUniformLocation(this.glProgram, 'pointLightColors');
+            this.glUniforms.pointLightRadii = gl.getUniformLocation(this.glProgram, 'pointLightRadii');
 
             // Create vertex array object
             this.glVertexArray = gl.createVertexArray();
@@ -524,6 +575,144 @@ class View {
         } catch (e) {
             console.error('WebGL render error:', e);
             if (this.debugEl) this.debugEl.innerText += 'WebGL render error: ' + (e as Error).message;
+        }
+    }
+
+    // Update lighting data for the view
+    updateLighting(lightingData: LightingData): void {
+        this.currentLightingData = lightingData;
+        
+        if (this.WebGPUBackend && this.device) {
+            this.updateWebGPULighting();
+        } else if (this.gl && this.glProgram) {
+            this.updateWebGLLighting();
+        }
+    }
+
+    private updateWebGPULighting(): void {
+        if (!this.device || !this.directLightsBuffer || !this.pointLightsBuffer || !this.lightingConfigBuffer) return;
+
+        // Update direct lights buffer
+        const directLightData = new Float32Array(this.maxDirectLights * 8); // 8 floats per light (2 vec4s)
+        for (let i = 0; i < Math.min(this.currentLightingData.directLights.length, this.maxDirectLights); i++) {
+            const light = this.currentLightingData.directLights[i];
+            const offset = i * 8;
+            // Direction vec4
+            directLightData[offset + 0] = light.direction[0];
+            directLightData[offset + 1] = light.direction[1];
+            directLightData[offset + 2] = light.direction[2];
+            directLightData[offset + 3] = 0; // padding
+            // Color vec4 
+            directLightData[offset + 4] = light.color[0];
+            directLightData[offset + 5] = light.color[1];
+            directLightData[offset + 6] = light.color[2];
+            directLightData[offset + 7] = light.color[3]; // intensity
+        }
+        this.device.queue.writeBuffer(this.directLightsBuffer, 0, directLightData);
+
+        // Update point lights buffer
+        const pointLightData = new Float32Array(this.maxPointLights * 12); // 12 floats per light (3 vec4s)
+        for (let i = 0; i < Math.min(this.currentLightingData.pointLights.length, this.maxPointLights); i++) {
+            const light = this.currentLightingData.pointLights[i];
+            const offset = i * 12;
+            // Position vec4
+            pointLightData[offset + 0] = light.position[0];
+            pointLightData[offset + 1] = light.position[1];
+            pointLightData[offset + 2] = light.position[2];
+            pointLightData[offset + 3] = 1; // w component
+            // Color vec4
+            pointLightData[offset + 4] = light.color[0];
+            pointLightData[offset + 5] = light.color[1];
+            pointLightData[offset + 6] = light.color[2];
+            pointLightData[offset + 7] = light.color[3]; // intensity
+            // Radius + padding
+            pointLightData[offset + 8] = light.radius;
+            pointLightData[offset + 9] = 0; // padding
+            pointLightData[offset + 10] = 0; // padding
+            pointLightData[offset + 11] = 0; // padding
+        }
+        this.device.queue.writeBuffer(this.pointLightsBuffer, 0, pointLightData);
+
+        // Update lighting config buffer
+        const configData = new Uint32Array(4); // 4 uint32s (16 bytes)
+        configData[0] = this.currentLightingData.directLights.length;
+        configData[1] = this.currentLightingData.pointLights.length;
+        configData[2] = 0; // padding
+        configData[3] = 0; // padding
+        this.device.queue.writeBuffer(this.lightingConfigBuffer, 0, configData);
+    }
+
+    private updateWebGLLighting(): void {
+        if (!this.gl || !this.glProgram) return;
+        
+        this.gl.useProgram(this.glProgram);
+        
+        // Set number of lights
+        if (this.glUniforms.numDirectLights) {
+            this.gl.uniform1i(this.glUniforms.numDirectLights, this.currentLightingData.directLights.length);
+        }
+        if (this.glUniforms.numPointLights) {
+            this.gl.uniform1i(this.glUniforms.numPointLights, this.currentLightingData.pointLights.length);
+        }
+        
+        // Set directional light data
+        const maxDirectLights = 8;
+        const directDirections = new Float32Array(maxDirectLights * 4);
+        const directColors = new Float32Array(maxDirectLights * 4);
+        
+        for (let i = 0; i < Math.min(this.currentLightingData.directLights.length, maxDirectLights); i++) {
+            const light = this.currentLightingData.directLights[i];
+            const offset = i * 4;
+            
+            directDirections[offset + 0] = light.direction[0];
+            directDirections[offset + 1] = light.direction[1];
+            directDirections[offset + 2] = light.direction[2];
+            directDirections[offset + 3] = 0;
+            
+            directColors[offset + 0] = light.color[0];
+            directColors[offset + 1] = light.color[1];
+            directColors[offset + 2] = light.color[2];
+            directColors[offset + 3] = light.color[3];
+        }
+        
+        if (this.glUniforms.directLightDirections) {
+            this.gl.uniform4fv(this.glUniforms.directLightDirections, directDirections);
+        }
+        if (this.glUniforms.directLightColors) {
+            this.gl.uniform4fv(this.glUniforms.directLightColors, directColors);
+        }
+        
+        // Set point light data
+        const maxPointLights = 32;
+        const pointPositions = new Float32Array(maxPointLights * 4);
+        const pointColors = new Float32Array(maxPointLights * 4);
+        const pointRadii = new Float32Array(maxPointLights);
+        
+        for (let i = 0; i < Math.min(this.currentLightingData.pointLights.length, maxPointLights); i++) {
+            const light = this.currentLightingData.pointLights[i];
+            const offset = i * 4;
+            
+            pointPositions[offset + 0] = light.position[0];
+            pointPositions[offset + 1] = light.position[1];
+            pointPositions[offset + 2] = light.position[2];
+            pointPositions[offset + 3] = 1;
+            
+            pointColors[offset + 0] = light.color[0];
+            pointColors[offset + 1] = light.color[1];
+            pointColors[offset + 2] = light.color[2];
+            pointColors[offset + 3] = light.color[3];
+            
+            pointRadii[i] = light.radius;
+        }
+        
+        if (this.glUniforms.pointLightPositions) {
+            this.gl.uniform4fv(this.glUniforms.pointLightPositions, pointPositions);
+        }
+        if (this.glUniforms.pointLightColors) {
+            this.gl.uniform4fv(this.glUniforms.pointLightColors, pointColors);
+        }
+        if (this.glUniforms.pointLightRadii) {
+            this.gl.uniform1fv(this.glUniforms.pointLightRadii, pointRadii);
         }
     }
 }
