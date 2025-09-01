@@ -1,9 +1,9 @@
 import { renderer } from './shaders/default-wgsl-renderer';
 import { vertexShader, fragmentShader } from './shaders/default-glsl-renderer';
-import type { Vector4 } from '../misc/Vector4';
+import type { Vector4 } from '../Types/Vector4';
 import * as M from '../misc/Matrix4x4';
 import type { SceneObject } from '../Types/SceneObject';
-import type { Mesh } from '../Types/Mesh';
+import type { Mesh } from '../Types/MeshType';
 import { ShowWebGPUInstructions } from '../misc/misc';
 
 class View {

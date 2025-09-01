@@ -1,4 +1,5 @@
-export type Vector4 = Float32Array
+import type { Vector4 } from '../Types/Vector4';
+
 // factory
 export function vec4(x=0, y=0, z=0, w=0): Vector4 {
   const v = new Float32Array(4);
