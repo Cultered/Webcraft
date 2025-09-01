@@ -7,7 +7,7 @@ import MeshComponent from './Components/MeshComponent';
 import type { Mesh } from '../Types/Mesh';
 import type { Optimizations } from '../Types/Optimizations';
 import type { SceneObject } from '../Types/SceneObject';
-import type View from '../View/View';
+
 
 export const o11s: Optimizations = {
     CPU_CHUNKS: true,
