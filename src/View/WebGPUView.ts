@@ -33,6 +33,10 @@ export class WebGPUView extends BaseView {
     private cameraBuffer?: GPUBuffer;
     private projectionBuffer?: GPUBuffer;
 
+    // Added MSAA fields
+    private msaaColorTexture?: GPUTexture;
+    private sampleCount = 4; // or 2/4/8 based on adapter
+
     /**
      * Initialize WebGPU context and set up rendering pipeline.
      * 
@@ -43,7 +47,7 @@ export class WebGPUView extends BaseView {
         try {
             const adapter = await navigator.gpu.requestAdapter({ powerPreference: 'high-performance' });
             if (!adapter) throw new Error('No adapter found');
-            const device = await adapter.requestDevice({ requiredLimits: { maxBufferSize: 600000000 } });
+            const device = await adapter.requestDevice();
             const context = canvas.getContext('webgpu')!;
             const format = navigator.gpu.getPreferredCanvasFormat();
             context.configure({ device, format, alphaMode: 'premultiplied' });
@@ -53,13 +57,30 @@ export class WebGPUView extends BaseView {
             this.context = context;
 
             try {
-                const sampleCount = 1;
-                this.depthTexture = device.createTexture({
-                    size: { width: canvas.width || window.innerWidth, height: canvas.height || window.innerHeight, depthOrArrayLayers: 1 },
-                    sampleCount,
-                    format: 'depth24plus',
-                    usage: GPUTextureUsage.RENDER_ATTACHMENT,
-                });
+                // Create helper to (re)create MSAA color + depth attachments sized to the canvas
+                const makeAttachments = () => {
+                    const w = this.canvas!.width || window.innerWidth;
+                    const h = this.canvas!.height || window.innerHeight;
+
+                    this.depthTexture?.destroy();
+                    this.msaaColorTexture?.destroy();
+
+                    this.depthTexture = this.device!.createTexture({
+                        size: { width: w, height: h, depthOrArrayLayers: 1 },
+                        sampleCount: this.sampleCount,
+                        format: 'depth24plus',
+                        usage: GPUTextureUsage.RENDER_ATTACHMENT,
+                    });
+
+                    this.msaaColorTexture = this.device!.createTexture({
+                        size: { width: w, height: h, depthOrArrayLayers: 1 },
+                        sampleCount: this.sampleCount,
+                        format: navigator.gpu.getPreferredCanvasFormat(),
+                        usage: GPUTextureUsage.RENDER_ATTACHMENT,
+                    });
+                };
+
+                makeAttachments();
 
                 const shader = renderer;
                 const shaderModule = device.createShaderModule({ code: shader });
@@ -77,8 +98,9 @@ export class WebGPUView extends BaseView {
                     usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
                 });
 
+                // ensure projection is transposed before upload
                 const initialProj = M.mat4Projection(this.fov, (canvas.width || window.innerWidth) / (canvas.height || window.innerHeight), this.near, this.far);
-                this.device.queue.writeBuffer(this.projectionBuffer, 0, (initialProj).buffer);
+                this.device.queue.writeBuffer(this.projectionBuffer, 0, M.mat4Transpose(initialProj).buffer);
 
                 const bindGroupLayout = device.createBindGroupLayout({
                     entries: [
@@ -102,7 +124,7 @@ export class WebGPUView extends BaseView {
                     fragment: { module: shaderModule, entryPoint: 'fragment_main', targets: [{ format: navigator.gpu.getPreferredCanvasFormat(), blend: { color: { srcFactor: 'one', dstFactor: 'one-minus-src-alpha' }, alpha: { srcFactor: 'one', dstFactor: 'one-minus-src-alpha' } } }] },
                     primitive: { topology: 'triangle-list', cullMode: 'back' },
                     layout: device.createPipelineLayout({ bindGroupLayouts: [bindGroupLayout] }),
-                    multisample: { count: sampleCount },
+                    multisample: { count: this.sampleCount },
                     depthStencil: { format: 'depth24plus', depthWriteEnabled: true, depthCompare: 'less' },
                 } as GPURenderPipelineDescriptor;
 
@@ -114,8 +136,8 @@ export class WebGPUView extends BaseView {
                     if (!this.canvas || !this.device) return;
                     this.canvas.width = window.innerWidth;
                     this.canvas.height = window.innerHeight;
-                    if (this.depthTexture) this.depthTexture.destroy();
-                    this.depthTexture = this.device!.createTexture({ size: { width: this.canvas.width, height: this.canvas.height, depthOrArrayLayers: 1 }, sampleCount, format: 'depth24plus', usage: GPUTextureUsage.RENDER_ATTACHMENT });
+                    // recreate msaa and depth attachments sized to the new canvas
+                    makeAttachments();
                     if (this.projectionBuffer) {
                         const proj = M.mat4Projection(this.fov, this.canvas.width / this.canvas.height, this.near, this.far);
                         this.device.queue.writeBuffer(this.projectionBuffer, 0, M.mat4Transpose(proj).buffer);
@@ -189,21 +211,26 @@ export class WebGPUView extends BaseView {
      * matrices and efficient command buffer recording for high-performance rendering.
      */
     public render(): void {
-        if (!this.device || !this.context || !this.renderPipeline || !this.depthTexture || !this.bindGroup) {
+        if (!this.device || !this.context || !this.renderPipeline || !this.depthTexture || !this.bindGroup || !this.msaaColorTexture) {
             console.warn('Render skipped: device/context/pipeline not ready');
             if (this.debugEl) this.debugEl.innerText += 'Render skipped: device/context/pipeline not ready';
             return;
         }
 
+        // use MSAA color texture as the attachment and resolve into swapchain view
+        const swapView = this.context.getCurrentTexture().createView();
+        const msaaView = this.msaaColorTexture!.createView();
+
         const renderPassDescriptor: GPURenderPassDescriptor = {
             colorAttachments: [{
-                view: this.context.getCurrentTexture().createView(),
+                view: msaaView,
+                resolveTarget: swapView,
                 clearValue: this.clearValue as GPUColor,
                 loadOp: 'clear',
                 storeOp: 'store',
             }],
             depthStencilAttachment: {
-                view: this.depthTexture.createView(),
+                view: this.depthTexture!.createView(),
                 depthLoadOp: 'clear',
                 depthClearValue: 1.0,
                 depthStoreOp: 'store',
