@@ -13,10 +13,16 @@ export default class Controller {
   private debugEl?: HTMLElement;
   private camId: string;
 
-  constructor(model: Model, view: BaseView, camId = 'main-camera') {
+  constructor(model: Model, view: BaseView, debugEl: HTMLElement, camId = 'main-camera') {
     this.model = model;
     this.view = view;
     this.camId = camId;
+    const canvasEl = document.querySelector('#main-canvas') as HTMLCanvasElement;
+    this.init(canvasEl, debugEl)
+  }
+
+  debugMode(enabled: boolean) {
+    this.debugEl?.style.setProperty('display', enabled ? 'block' : 'none');
   }
 
   init(canvasEl: HTMLCanvasElement, debugEl: HTMLElement) {
@@ -39,7 +45,10 @@ export default class Controller {
         document.removeEventListener('mousemove', this.onMouseMove);
       }
     });
+    this.start();
   }
+
+
 
   async start() {
 
@@ -93,22 +102,22 @@ export default class Controller {
         moveOps++;
       }
       if (this.keys.has('a')) {
-        const dir = M.mat4MulVec4(V.vec4(), this.model.requestInverseRotation(cam), right);
-        cam.position = V.vec4Add(V.vec4(), cam.position, dir);
-        moveOps++;
-      }
-      if (this.keys.has('d')) {
         const dir = M.mat4MulVec4(V.vec4(), this.model.requestInverseRotation(cam), left);
         cam.position = V.vec4Add(V.vec4(), cam.position, dir);
         moveOps++;
       }
+      if (this.keys.has('d')) {
+        const dir = M.mat4MulVec4(V.vec4(), this.model.requestInverseRotation(cam), right);
+        cam.position = V.vec4Add(V.vec4(), cam.position, dir);
+        moveOps++;
+      }
       if (this.keys.has(' ')) {
-        const dir = M.mat4MulVec4(V.vec4(), this.model.requestInverseRotation(cam), down);// i actually dont know lmfao
+        const dir = M.mat4MulVec4(V.vec4(), this.model.requestInverseRotation(cam), up);// i actually dont know lmfao
         cam.position = V.vec4Add(V.vec4(), cam.position, dir);
         moveOps++;
       }
       if (this.keys.has('control')) {
-        const dir = M.mat4MulVec4(V.vec4(), this.model.requestInverseRotation(cam), up);
+        const dir = M.mat4MulVec4(V.vec4(), this.model.requestInverseRotation(cam), down);
         cam.position = V.vec4Add(V.vec4(), cam.position, dir);
         moveOps++;
       }
@@ -141,7 +150,7 @@ export default class Controller {
     const t0 = performance.now();
     // update scene objects; non-blocking
     const separatedObjects = this.model.getObjectsSeparated();
-    this.view.registerSceneObjectsSeparated(separatedObjects.static, separatedObjects.nonStatic, false).catch(err => console.error('registerSceneObjectsSeparated failed', err));
+    this.view.registerSceneObjectsSeparated(separatedObjects.static, separatedObjects.nonStatic, false)
     times['registerSceneObjects'] = performance.now() - t0;
 
     const t1 = performance.now();
@@ -201,8 +210,8 @@ export default class Controller {
     if (!cam) return;
     const dy = e.movementY * this.mouseSensitivity; // x axis rotation
     const dx = e.movementX * this.mouseSensitivity; // y axis rotation
-    const ry = M.mat4Rotation(0, -dx, 0);
-    const rx = M.mat4Rotation(-dy, 0, 0);
+    const ry = M.mat4Rotation(0, dx, 0);
+    const rx = M.mat4Rotation(dy, 0, 0);
 
     cam.rotation = M.mat4Mul(M.mat4(), ry, cam.rotation);
     cam.rotation = M.mat4Mul(M.mat4(), rx, cam.rotation);

@@ -116,7 +116,7 @@ export class WebGLView extends BaseView {
     }
 
 
-    public async registerSceneObjectsSeparated(staticObjects: SceneObject[], nonStaticObjects: SceneObject[], _updateVertices: boolean): Promise<void> {
+    public registerSceneObjectsSeparated(staticObjects: SceneObject[], nonStaticObjects: SceneObject[], _updateVertices: boolean): void {
         if (!this.gl) throw new Error('WebGL context not initialized');
         
         this.staticSceneObjects = staticObjects;

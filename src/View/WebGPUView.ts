@@ -160,7 +160,7 @@ export class WebGPUView extends BaseView {
     // removed staticObjectCount; batches track ordering
 
 
-    public async registerSceneObjectsSeparated(staticObjects: SceneObject[], nonStaticObjects: SceneObject[], updateStatic: boolean): Promise<void> {
+    public registerSceneObjectsSeparated(staticObjects: SceneObject[], nonStaticObjects: SceneObject[], updateStatic: boolean): void {
         if (!this.device) throw new Error('WebGPU device not initialized');
 
 

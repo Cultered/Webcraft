@@ -2,6 +2,7 @@ import type { SceneObject } from '../Types/SceneObject';
 import type { Mesh } from '../Types/MeshType';
 import * as V from '../misc/vec4';
 import * as M from '../misc/mat4';
+import { radians } from '../misc/misc';
 
 /**
  * Base interface/abstract class for rendering views
@@ -10,7 +11,7 @@ import * as M from '../misc/mat4';
 export abstract class BaseView {
     // Common properties
     public maxObjects = 1_000_000;
-    protected fov = 30;
+    protected fov = radians(80);
     protected near = 0.1;
     protected far = 1000;
     protected meshes: { [id: string]: Mesh } = {};
@@ -47,7 +48,7 @@ export abstract class BaseView {
     /**
      * Register scene objects separately for static/non-static optimization
      */
-    public abstract registerSceneObjectsSeparated(staticObjects: SceneObject[], nonStaticObjects: SceneObject[], updateVertices: boolean): Promise<void>;
+    public abstract registerSceneObjectsSeparated(staticObjects: SceneObject[], nonStaticObjects: SceneObject[], updateVertices: boolean): void;
 
     /**
      * Set the debug element for displaying debug information
