@@ -6,16 +6,28 @@ import { ShowWebGPUInstructions } from '../misc/misc';
 import * as M from '../misc/mat4';
 
 /**
- * WebGPU-based rendering implementation.
+ * WebGPU-based rendering implementation with static/non-static object optimization.
  * 
  * This class provides a modern, efficient implementation using the WebGPU API.
  * It leverages compute shaders, storage buffers, and advanced GPU features
  * for high-performance rendering of large numbers of objects.
  * 
+ * Key Optimization Features:
+ * - **Static/Non-static Separation**: Objects are sorted first by static/non-static status,
+ *   then by mesh type for optimal rendering performance
+ * - **Partial Buffer Updates**: Only non-static objects are updated when their transforms change,
+ *   while static objects remain untouched in GPU memory
+ * - **Batched Rendering**: Objects are rendered in batches by mesh type to minimize state changes
+ * 
+ * Buffer Layout:
+ * ```
+ * [Static Objects by Mesh A] [Static Objects by Mesh B] ... [Non-static Objects by Mesh A] [Non-static Objects by Mesh B] ...
+ * ```
+ * 
  * Features:
  * - WebGPU context initialization with high-performance adapter
- * - Storage buffer-based object matrix management
- * - Efficient instanced rendering
+ * - Storage buffer-based object matrix management with static optimization
+ * - Efficient instanced rendering with mesh-based batching
  * - Automatic resource management and cleanup
  * - Modern shader pipeline with WGSL
  * - Debug information display
@@ -160,15 +172,23 @@ export class WebGPUView extends BaseView {
         }
     }
 
-    // removed staticObjectCount; batches track ordering
-
-
+    /**
+     * Register scene objects with static/non-static optimization.
+     * 
+     * This method allows efficient handling of static and non-static objects by:
+     * - Organizing objects in the buffer with static objects first, then non-static
+     * - Only updating the non-static portion when updateStatic is false
+     * - Maintaining separate batch tracking for optimal rendering
+     * 
+     * @param staticObjects - Objects that don't change and can be cached in GPU memory
+     * @param nonStaticObjects - Objects that may change and need regular updates
+     * @param updateStatic - Whether to update static objects (use true for initial setup or when static objects change)
+     */
     public registerSceneObjectsSeparated(staticObjects: SceneObject[], nonStaticObjects: SceneObject[], updateStatic: boolean): void {
         if (!this.device) throw new Error('WebGPU device not initialized');
 
-
-    this.staticSceneObjects = staticObjects;
-    this.nonStaticSceneObjects = nonStaticObjects;
+        this.staticSceneObjects = staticObjects;
+        this.nonStaticSceneObjects = nonStaticObjects;
 
         if (updateStatic) {
             // Update entire buffer including static objects
@@ -177,7 +197,6 @@ export class WebGPUView extends BaseView {
             // Only update non-static portion
             this.updateNonStaticObjectsOnly(nonStaticObjects);
         }
-
     }
 
     public registerCamera(camera: SceneObject): void {
@@ -208,10 +227,17 @@ export class WebGPUView extends BaseView {
     }
 
     /**
-     * Render the current scene using WebGPU.
+     * Render the current scene using WebGPU with static/non-static optimization.
      * 
      * This method uses modern WebGPU features including storage buffers for object
      * matrices and efficient command buffer recording for high-performance rendering.
+     * 
+     * Rendering order:
+     * 1. Static objects grouped by mesh (no state changes within mesh groups)
+     * 2. Non-static objects grouped by mesh (no state changes within mesh groups)
+     * 
+     * This approach minimizes GPU state changes while maintaining the optimization
+     * benefits of the static/non-static buffer separation.
      */
     public render(): void {
         if (!this.device || !this.context || !this.renderPipeline || !this.depthTexture || !this.bindGroup || !this.msaaColorTexture) {
