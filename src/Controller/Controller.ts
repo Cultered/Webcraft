@@ -2,6 +2,7 @@ import Model from '../Model/Model';
 import * as V from '../misc/vec4';
 import * as M from '../misc/mat4';
 import { BaseView } from '../View/BaseView';
+import type { C } from 'vitest/dist/chunks/reporters.d.BFLkQcL6.js';
 
 export default class Controller {
   private model: Model;
@@ -57,7 +58,7 @@ export default class Controller {
     if (this.intervalId !== null) return; // already running
     let lastModelTime = performance.now();
 
-    this.intervalId = window.setInterval(() => {
+    const controllerLoop = () => {
       if (!this.debugEl) return;
       this.debugEl.innerText = '';
 
@@ -138,11 +139,15 @@ export default class Controller {
       }
       out += `\n`;
       this.debugEl.innerText += out;
-    }, 1000 / 60);
+      requestAnimationFrame(controllerLoop);
+    }
+    requestAnimationFrame(controllerLoop);
+    
   }
 
   // moved render loop from main.ts into controller so controller owns FPS/debug
   private renderLoop = () => {
+    console.log("render loop")
     if (!this.debugEl) return;
 
     const times: { [k: string]: number } = {};
@@ -150,7 +155,14 @@ export default class Controller {
     const t0 = performance.now();
     // update scene objects; non-blocking
     const separatedObjects = this.model.getObjectsSeparated();
-    this.view.registerSceneObjectsSeparated(separatedObjects.static, separatedObjects.nonStatic, false)
+    this.view.registerSceneObjectsSeparated(
+      separatedObjects.static,
+      separatedObjects.nonStatic,
+      this.model.updateStatic
+    );
+    if (this.model.updateStatic) {
+      this.model.updateStatic = false;
+    }
     times['registerSceneObjects'] = performance.now() - t0;
 
     const t1 = performance.now();
