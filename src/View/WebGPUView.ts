@@ -6,16 +6,28 @@ import { ShowWebGPUInstructions } from '../misc/misc';
 import * as M from '../misc/mat4';
 
 /**
- * WebGPU-based rendering implementation.
+ * WebGPU-based rendering implementation with static/non-static object optimization.
  * 
  * This class provides a modern, efficient implementation using the WebGPU API.
  * It leverages compute shaders, storage buffers, and advanced GPU features
  * for high-performance rendering of large numbers of objects.
  * 
+ * Key Optimization Features:
+ * - **Static/Non-static Separation**: Objects are sorted first by static/non-static status,
+ *   then by mesh type for optimal rendering performance
+ * - **Partial Buffer Updates**: Only non-static objects are updated when their transforms change,
+ *   while static objects remain untouched in GPU memory
+ * - **Batched Rendering**: Objects are rendered in batches by mesh type to minimize state changes
+ * 
+ * Buffer Layout:
+ * ```
+ * [Static Objects by Mesh A] [Static Objects by Mesh B] ... [Non-static Objects by Mesh A] [Non-static Objects by Mesh B] ...
+ * ```
+ * 
  * Features:
  * - WebGPU context initialization with high-performance adapter
- * - Storage buffer-based object matrix management
- * - Efficient instanced rendering
+ * - Storage buffer-based object matrix management with static optimization
+ * - Efficient instanced rendering with mesh-based batching
  * - Automatic resource management and cleanup
  * - Modern shader pipeline with WGSL
  * - Debug information display
@@ -28,6 +40,9 @@ export class WebGPUView extends BaseView {
     private renderPipeline?: GPURenderPipeline;
     private objectBuffers = new Map<string, { vertexBuffer: GPUBuffer; indexBuffer: GPUBuffer; indices: Uint32Array | Uint16Array }>();
     private meshBatches = new Map<string, { base: number; count: number }>();
+    private staticMeshBatches = new Map<string, { base: number; count: number }>();
+    private nonStaticMeshBatches = new Map<string, { base: number; count: number }>();
+    private nonStaticBaseOffset = 0;
     private bindGroup?: GPUBindGroup;
     private objectStorageBuffer?: GPUBuffer;
     private cameraBuffer?: GPUBuffer;
@@ -157,15 +172,23 @@ export class WebGPUView extends BaseView {
         }
     }
 
-    // removed staticObjectCount; batches track ordering
-
-
+    /**
+     * Register scene objects with static/non-static optimization.
+     * 
+     * This method allows efficient handling of static and non-static objects by:
+     * - Organizing objects in the buffer with static objects first, then non-static
+     * - Only updating the non-static portion when updateStatic is false
+     * - Maintaining separate batch tracking for optimal rendering
+     * 
+     * @param staticObjects - Objects that don't change and can be cached in GPU memory
+     * @param nonStaticObjects - Objects that may change and need regular updates
+     * @param updateStatic - Whether to update static objects (use true for initial setup or when static objects change)
+     */
     public registerSceneObjectsSeparated(staticObjects: SceneObject[], nonStaticObjects: SceneObject[], updateStatic: boolean): void {
         if (!this.device) throw new Error('WebGPU device not initialized');
 
-
-    this.staticSceneObjects = staticObjects;
-    this.nonStaticSceneObjects = nonStaticObjects;
+        this.staticSceneObjects = staticObjects;
+        this.nonStaticSceneObjects = nonStaticObjects;
 
         if (updateStatic) {
             // Update entire buffer including static objects
@@ -174,7 +197,6 @@ export class WebGPUView extends BaseView {
             // Only update non-static portion
             this.updateNonStaticObjectsOnly(nonStaticObjects);
         }
-
     }
 
     public registerCamera(camera: SceneObject): void {
@@ -205,10 +227,17 @@ export class WebGPUView extends BaseView {
     }
 
     /**
-     * Render the current scene using WebGPU.
+     * Render the current scene using WebGPU with static/non-static optimization.
      * 
      * This method uses modern WebGPU features including storage buffers for object
      * matrices and efficient command buffer recording for high-performance rendering.
+     * 
+     * Rendering order:
+     * 1. Static objects grouped by mesh (no state changes within mesh groups)
+     * 2. Non-static objects grouped by mesh (no state changes within mesh groups)
+     * 
+     * This approach minimizes GPU state changes while maintaining the optimization
+     * benefits of the static/non-static buffer separation.
      */
     public render(): void {
         if (!this.device || !this.context || !this.renderPipeline || !this.depthTexture || !this.bindGroup || !this.msaaColorTexture) {
@@ -242,10 +271,23 @@ export class WebGPUView extends BaseView {
             const passEncoder = commandEncoder.beginRenderPass(renderPassDescriptor);
             passEncoder.setPipeline(this.renderPipeline);
 
-            // Real instancing: bind once and draw per-mesh using firstInstance + instanceCount
+            // Optimized rendering: draw static objects first, then non-static objects, grouped by mesh
             passEncoder.setBindGroup(0, this.bindGroup!);
             let objIndex = 0;
-            for (const [meshId, batch] of this.meshBatches) {
+            
+            // First, draw all static objects grouped by mesh
+            for (const [meshId, batch] of this.staticMeshBatches) {
+                const buf = this.objectBuffers.get(meshId);
+                if (!buf) continue;
+                passEncoder.setVertexBuffer(0, buf.vertexBuffer);
+                const indexFormat: GPUIndexFormat = buf.indices instanceof Uint16Array ? 'uint16' : 'uint32';
+                passEncoder.setIndexBuffer(buf.indexBuffer, indexFormat);
+                passEncoder.drawIndexed(buf.indices.length, batch.count, 0, 0, batch.base);
+                objIndex += batch.count;
+            }
+            
+            // Then, draw all non-static objects grouped by mesh
+            for (const [meshId, batch] of this.nonStaticMeshBatches) {
                 const buf = this.objectBuffers.get(meshId);
                 if (!buf) continue;
                 passEncoder.setVertexBuffer(0, buf.vertexBuffer);
@@ -314,9 +356,9 @@ export class WebGPUView extends BaseView {
     private updateNonStaticObjectsOnly(nonStaticObjects: SceneObject[]): void {
         if (!this.device) throw new Error('Device not initialized');
 
-        // Rebuild full buffer since batches depend on mesh ids and ordering
-        const all = this.buildBatchesAndMatrixBuffer(this.staticSceneObjects, nonStaticObjects);
         if (!this.objectStorageBuffer) {
+            // If no buffer exists, create it and write all data
+            const all = this.buildBatchesAndMatrixBuffer(this.staticSceneObjects, nonStaticObjects);
             this.maxObjects = Math.max(this.maxObjects, (this.staticSceneObjects.length + nonStaticObjects.length));
             this.objectStorageBuffer = this.device.createBuffer({ size: 64 * this.maxObjects, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST });
             // rebuild bind group
@@ -326,27 +368,54 @@ export class WebGPUView extends BaseView {
                 { binding: 1, resource: { buffer: this.cameraBuffer! } },
                 { binding: 2, resource: { buffer: this.projectionBuffer! } },
             ] });
+            this.device.queue.writeBuffer(this.objectStorageBuffer!, 0, all.buffer, 0, all.byteLength);
+            return;
         }
-        this.device.queue.writeBuffer(this.objectStorageBuffer!, 0, all.buffer, 0, all.byteLength);
+
+        // Only update the non-static portion of the buffer
+        const nonStaticMatrixBuffer = this.buildNonStaticMatrixBuffer(nonStaticObjects);
+        if (nonStaticMatrixBuffer.length > 0) {
+            const offsetBytes = this.nonStaticBaseOffset * 16 * 4; // offset in bytes (16 floats * 4 bytes per float)
+            this.device.queue.writeBuffer(this.objectStorageBuffer!, offsetBytes, nonStaticMatrixBuffer.buffer, 0, nonStaticMatrixBuffer.byteLength);
+        }
+        
+        // Update batch information for non-static objects
+        this.updateNonStaticBatches(nonStaticObjects);
     }
 
     private buildBatchesAndMatrixBuffer(staticObjs: SceneObject[], nonStaticObjs: SceneObject[]) {
-        const groups = new Map<string, SceneObject[]>();
-        const push = (o: SceneObject) => {
+        // Group objects by mesh, keeping static and non-static separate
+        const staticGroups = new Map<string, SceneObject[]>();
+        const nonStaticGroups = new Map<string, SceneObject[]>();
+        
+        const pushStatic = (o: SceneObject) => {
             const id = o.props.mesh!;
-            if (!groups.has(id)) groups.set(id, []);
-            groups.get(id)!.push(o);
+            if (!staticGroups.has(id)) staticGroups.set(id, []);
+            staticGroups.get(id)!.push(o);
         };
-        staticObjs.forEach(push);
-        nonStaticObjs.forEach(push);
+        
+        const pushNonStatic = (o: SceneObject) => {
+            const id = o.props.mesh!;
+            if (!nonStaticGroups.has(id)) nonStaticGroups.set(id, []);
+            nonStaticGroups.get(id)!.push(o);
+        };
+        
+        staticObjs.forEach(pushStatic);
+        nonStaticObjs.forEach(pushNonStatic);
 
         const total = staticObjs.length + nonStaticObjs.length;
         const out = new Float32Array(total * 16);
         this.meshBatches.clear();
-
+        this.staticMeshBatches.clear();
+        this.nonStaticMeshBatches.clear();
+        
         let cursor = 0;
-        for (const [meshId, arr] of groups) {
-            this.meshBatches.set(meshId, { base: cursor, count: arr.length });
+        
+        // First, add all static objects grouped by mesh
+        for (const [meshId, arr] of staticGroups) {
+            const batch = { base: cursor, count: arr.length };
+            this.staticMeshBatches.set(meshId, batch);
+            
             for (let i = 0; i < arr.length; i++) {
                 const o = arr[i];
                 const t = [o.position[0], o.position[1], o.position[2]];
@@ -356,6 +425,116 @@ export class WebGPUView extends BaseView {
             }
             cursor += arr.length;
         }
+        
+        // Then, add all non-static objects grouped by mesh
+        this.nonStaticBaseOffset = cursor;
+        for (const [meshId, arr] of nonStaticGroups) {
+            const batch = { base: cursor, count: arr.length };
+            this.nonStaticMeshBatches.set(meshId, batch);
+            
+            for (let i = 0; i < arr.length; i++) {
+                const o = arr[i];
+                const t = [o.position[0], o.position[1], o.position[2]];
+                const s = [o.scale[0], o.scale[1], o.scale[2]];
+                const m = M.mat4Transpose(M.mat4TRS(t, o.rotation, s));
+                out.set(m, (cursor + i) * 16);
+            }
+            cursor += arr.length;
+        }
+        
+        // For backward compatibility, maintain the combined meshBatches
+        for (const [meshId, staticBatch] of this.staticMeshBatches) {
+            const nonStaticBatch = this.nonStaticMeshBatches.get(meshId);
+            if (nonStaticBatch) {
+                // If both static and non-static exist, combine them
+                this.meshBatches.set(meshId, { 
+                    base: staticBatch.base, 
+                    count: staticBatch.count + nonStaticBatch.count 
+                });
+            } else {
+                // Only static exists
+                this.meshBatches.set(meshId, staticBatch);
+            }
+        }
+        
+        // Add non-static only meshes
+        for (const [meshId, nonStaticBatch] of this.nonStaticMeshBatches) {
+            if (!this.staticMeshBatches.has(meshId)) {
+                this.meshBatches.set(meshId, nonStaticBatch);
+            }
+        }
+        
         return out;
+    }
+
+    private buildNonStaticMatrixBuffer(nonStaticObjs: SceneObject[]): Float32Array {
+        // Group non-static objects by mesh
+        const nonStaticGroups = new Map<string, SceneObject[]>();
+        
+        const pushNonStatic = (o: SceneObject) => {
+            const id = o.props.mesh!;
+            if (!nonStaticGroups.has(id)) nonStaticGroups.set(id, []);
+            nonStaticGroups.get(id)!.push(o);
+        };
+        
+        nonStaticObjs.forEach(pushNonStatic);
+        
+        const out = new Float32Array(nonStaticObjs.length * 16);
+        let cursor = 0;
+        
+        // Process in same order as buildBatchesAndMatrixBuffer
+        for (const [, arr] of nonStaticGroups) {
+            for (let i = 0; i < arr.length; i++) {
+                const o = arr[i];
+                const t = [o.position[0], o.position[1], o.position[2]];
+                const s = [o.scale[0], o.scale[1], o.scale[2]];
+                const m = M.mat4Transpose(M.mat4TRS(t, o.rotation, s));
+                out.set(m, (cursor + i) * 16);
+            }
+            cursor += arr.length;
+        }
+        
+        return out;
+    }
+
+    private updateNonStaticBatches(nonStaticObjs: SceneObject[]): void {
+        // Group non-static objects by mesh and update batch information
+        const nonStaticGroups = new Map<string, SceneObject[]>();
+        
+        const pushNonStatic = (o: SceneObject) => {
+            const id = o.props.mesh!;
+            if (!nonStaticGroups.has(id)) nonStaticGroups.set(id, []);
+            nonStaticGroups.get(id)!.push(o);
+        };
+        
+        nonStaticObjs.forEach(pushNonStatic);
+        
+        this.nonStaticMeshBatches.clear();
+        let cursor = this.nonStaticBaseOffset;
+        
+        for (const [meshId, arr] of nonStaticGroups) {
+            this.nonStaticMeshBatches.set(meshId, { base: cursor, count: arr.length });
+            cursor += arr.length;
+        }
+        
+        // Update combined meshBatches for backward compatibility
+        for (const [meshId, staticBatch] of this.staticMeshBatches) {
+            const nonStaticBatch = this.nonStaticMeshBatches.get(meshId);
+            if (nonStaticBatch) {
+                this.meshBatches.set(meshId, { 
+                    base: staticBatch.base, 
+                    count: staticBatch.count + nonStaticBatch.count 
+                });
+            } else {
+                this.meshBatches.set(meshId, staticBatch);
+            }
+        }
+        
+        // Add non-static only meshes
+        for (const [meshId, nonStaticBatch] of this.nonStaticMeshBatches) {
+            if (!this.staticMeshBatches.has(meshId)) {
+                this.meshBatches.set(meshId, nonStaticBatch);
+            }
+        }
     }
 }

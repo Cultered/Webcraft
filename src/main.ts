@@ -40,9 +40,9 @@ const debugEl = setupDebugElement();
     const sphereComponent = new MeshComponent(sphereMesh, true);
     //const cubeComponent = new MeshComponent(cubeMesh, true);
 
-    for (let i = 0; i < 50; i++) {
-        for (let j = 0; j < 50; j++) {
-            for (let k = 0; k < 50; k++) {
+    for (let i = 0; i < 100; i++) {
+        for (let j = 0; j < 100; j++) {
+            for (let k = 0; k < 100; k++) {
                 const id = `obj-${i}-${j}-${k}`;
                 const ent = new Entity(id, V.vec4(i * 2, j * 2, k * 2), undefined, V.vec4(0.1, 0.1, 0.1, 1));
                 ent.addComponent(sphereComponent);

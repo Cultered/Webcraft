@@ -12,6 +12,7 @@ import { o11s } from '../config/config';
 
 export default class Model {
     private entities: Map<string, Entity> = new Map();
+    public updateStatic: boolean = true;
     private cameras: Entity[] = [];
     private chunks: Map<string, string[]> = new Map();
     private cachedVisibleObjects: string[] = [];
@@ -51,6 +52,7 @@ export default class Model {
         }
         this.entities.set(ent.id, ent);
         this.assignToChunk(ent);
+        this.updateStatic = true;
         return ent;
     }
 
@@ -105,6 +107,7 @@ export default class Model {
         if (this.lastCameraChunkKey === camChunkKey && !o11s.CPU_SOFT_FRUSTUM_CULLING) {
             return this.cachedVisibleObjects.map(id => this.entities.get(id)).filter(Boolean) as Entity[];
         }
+        this.updateStatic = true;//PLS FIX ME
 
         const collected = new Set<Entity>();
         for (let dx = -o11s.RENDER_DISTANCE; dx <= o11s.RENDER_DISTANCE; dx++) {
