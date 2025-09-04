@@ -221,6 +221,9 @@ export default class Model {
         for (const e of this.entities.values()) {
             (e as Entity).update(deltaMs);
         }
+        for (const cam of this.cameras) {
+            cam.update(deltaMs);
+        }
     }
 
     private entityToSceneObject(e: Entity): SceneObject {

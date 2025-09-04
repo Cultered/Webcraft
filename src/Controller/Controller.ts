@@ -1,13 +1,9 @@
 import Model from '../Model/Model';
-import * as V from '../misc/vec4';
-import * as M from '../misc/mat4';
 import { BaseView } from '../View/BaseView';
 import { listenDelta, getDelta } from '../misc/misc';
 export default class Controller {
   private model: Model;
   private view: BaseView;
-  private keys: Set<string> = new Set();
-  private mouseSensitivity = 0.0025; // radians per pixel
   private intervalId: number | null = null;
   private canvasEl?: HTMLCanvasElement;
   private debugEl?: HTMLElement;
@@ -29,21 +25,10 @@ export default class Controller {
     this.canvasEl = canvasEl;
     this.debugEl = debugEl;
 
-    // keyboard
-    window.addEventListener('keydown', this.onKeyDown);
-    window.addEventListener('keyup', this.onKeyUp);
 
     // pointer lock + mouse look
     this.canvasEl.addEventListener('click', () => {
       this.canvasEl?.requestPointerLock?.();
-    });
-
-    document.addEventListener('pointerlockchange', () => {
-      if (document.pointerLockElement === this.canvasEl) {
-        document.addEventListener('mousemove', this.onMouseMove);
-      } else {
-        document.removeEventListener('mousemove', this.onMouseMove);
-      }
     });
     this.start();
   }
@@ -58,73 +43,29 @@ export default class Controller {
     listenDelta('controller-delta')
 
     const controllerLoop = () => {
-      if (!this.debugEl) return;
+      const delta = getDelta('controller-delta') / 1000; // seconds
+      listenDelta('controller-delta')
+      if (!this.debugEl) this.debugEl= new HTMLElement();
       this.debugEl.innerText = '';
 
-      const delta = getDelta('controller-delta') /1000; // seconds
-      listenDelta('controller-delta')
+
       listenDelta('model-update')
       this.model.update(delta * 1000);
       this.debugEl.innerText += `Model update : ${getDelta('model-update')} ms`;
 
-      const cam = this.model.getCamera(this.camId);
-      if (!cam) {
-        console.error("No camera")
-        return
-      }
       listenDelta('camera-update')
-      // movement calculations
-      const speedBase = this.keys.has('shift') ? 20 : 3; // units per second
 
-      const forward = V.vec4Scale(V.vec4(), V.forward(), speedBase * delta);
-      const right = V.vec4Scale(V.vec4(), V.right(), speedBase * delta);
-      const up = V.vec4Scale(V.vec4(), V.up(), speedBase * delta);
-
-      const backward = V.vec4Neg(V.vec4(), forward);
-      const left = V.vec4Neg(V.vec4(), right);
-      const down = V.vec4Neg(V.vec4(), up);
-
-      let moveOps = 0;
-      if (this.keys.has('w')) {
-        const dir = M.mat4MulVec4(V.vec4(), this.model.requestInverseRotation(cam), backward);// forward is -Z in view space
-        cam.position = V.vec4Add(V.vec4(), cam.position, dir);
-        moveOps++;
-      }
-      if (this.keys.has('s')) {
-        const dir = M.mat4MulVec4(V.vec4(), this.model.requestInverseRotation(cam), forward);
-        cam.position = V.vec4Add(V.vec4(), cam.position, dir);
-        moveOps++;
-      }
-      if (this.keys.has('a')) {
-        const dir = M.mat4MulVec4(V.vec4(), this.model.requestInverseRotation(cam), left);
-        cam.position = V.vec4Add(V.vec4(), cam.position, dir);
-        moveOps++;
-      }
-      if (this.keys.has('d')) {
-        const dir = M.mat4MulVec4(V.vec4(), this.model.requestInverseRotation(cam), right);
-        cam.position = V.vec4Add(V.vec4(), cam.position, dir);
-        moveOps++;
-      }
-      if (this.keys.has(' ')) {
-        const dir = M.mat4MulVec4(V.vec4(), this.model.requestInverseRotation(cam), up);// i actually dont know lmfao
-        cam.position = V.vec4Add(V.vec4(), cam.position, dir);
-        moveOps++;
-      }
-      if (this.keys.has('control')) {
-        const dir = M.mat4MulVec4(V.vec4(), this.model.requestInverseRotation(cam), down);
-        cam.position = V.vec4Add(V.vec4(), cam.position, dir);
-        moveOps++;
-      }
+      // Camera movement and mouse look logic moved to Freecam component
       this.debugEl.innerText += `\nCamera update : ${getDelta('camera-update')} ms`;
 
       listenDelta('view-update')
       this.renderLoop();
       this.debugEl.innerText += `\nView render : ${getDelta('view-update')} ms`;
       requestAnimationFrame(controllerLoop);
-      this.debugEl.innerText += `\nTotal loop : ${getDelta('controller-delta')} ms`;
+      this.debugEl.innerText += `\nTotal loop : ${delta} s`;
     }
     requestAnimationFrame(controllerLoop);
-    
+
   }
 
   // moved render loop from main.ts into controller so controller owns FPS/debug
@@ -171,29 +112,7 @@ export default class Controller {
       clearInterval(this.intervalId);
       this.intervalId = null;
     }
-    window.removeEventListener('keydown', this.onKeyDown);
-    window.removeEventListener('keyup', this.onKeyUp);
-    document.removeEventListener('mousemove', this.onMouseMove);
+    // Freecam component now handles input listeners
   }
 
-  private onKeyDown = (e: KeyboardEvent) => {
-    this.keys.add(e.key.toLowerCase());
-  };
-
-  private onKeyUp = (e: KeyboardEvent) => {
-    this.keys.delete(e.key.toLowerCase());
-  };
-
-  private onMouseMove = (e: MouseEvent) => {
-    const cam = this.model.getCamera(this.camId);
-    if (!cam) return;
-    const dy = e.movementY * this.mouseSensitivity; // x axis rotation
-    const dx = e.movementX * this.mouseSensitivity; // y axis rotation
-    const ry = M.mat4Rotation(0, dx, 0);
-    const rx = M.mat4Rotation(dy, 0, 0);
-
-    cam.rotation = M.mat4Mul(M.mat4(), ry, cam.rotation);
-    cam.rotation = M.mat4Mul(M.mat4(), rx, cam.rotation);
-    cam.props.updateInverseRotation = true;
-  };
 }

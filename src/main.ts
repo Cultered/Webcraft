@@ -29,6 +29,13 @@ const debugEl = setupDebugElement();
     view.setDebugElement(debugEl);
 
     model.addCamera('main-camera', V.vec4(0, 0, 0), M.mat4Rotation(0, Math.PI, 0));
+    const mainCam = model.getCamera('main-camera');
+    if (mainCam) {
+        mainCam.props.model = model;
+        const canvasEl = document.querySelector('#main-canvas') as HTMLCanvasElement;
+        const Freecam = (await import('./Model/Components/Freecam')).default;
+        mainCam.addComponent(new Freecam(canvasEl));
+    }
 
     const sphereMesh = { id: 'builtin-sphere', ...generateSphereMesh(3, 1) };
     const cubeMesh = { id: 'builtin-cube', ...generateCubeMesh(1) };
