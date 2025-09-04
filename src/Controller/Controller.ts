@@ -2,8 +2,7 @@ import Model from '../Model/Model';
 import * as V from '../misc/vec4';
 import * as M from '../misc/mat4';
 import { BaseView } from '../View/BaseView';
-import type { C } from 'vitest/dist/chunks/reporters.d.BFLkQcL6.js';
-
+import { listenDelta, getDelta } from '../misc/misc';
 export default class Controller {
   private model: Model;
   private view: BaseView;
@@ -56,29 +55,24 @@ export default class Controller {
     const separatedObjects = this.model.getObjectsSeparated();
     await this.view.registerSceneObjectsSeparated(separatedObjects.static, separatedObjects.nonStatic, true);
     if (this.intervalId !== null) return; // already running
-    let lastModelTime = performance.now();
+    listenDelta('controller-delta')
 
     const controllerLoop = () => {
       if (!this.debugEl) return;
       this.debugEl.innerText = '';
 
-      const now = performance.now();
-      const delta = (now - lastModelTime) / 1000; // seconds
-      lastModelTime = now;
-
-      // performance timers
-      const times: { [k: string]: number } = {};
-
-      const t0 = performance.now();
+      const delta = getDelta('controller-delta') /1000; // seconds
+      listenDelta('controller-delta')
+      listenDelta('model-update')
       this.model.update(delta * 1000);
-      times['model.update'] = performance.now() - t0;
+      this.debugEl.innerText += `Model update : ${getDelta('model-update')} ms`;
 
       const cam = this.model.getCamera(this.camId);
       if (!cam) {
         console.error("No camera")
         return
       }
-
+      listenDelta('camera-update')
       // movement calculations
       const speedBase = this.keys.has('shift') ? 20 : 3; // units per second
 
@@ -91,7 +85,6 @@ export default class Controller {
       const down = V.vec4Neg(V.vec4(), up);
 
       let moveOps = 0;
-      const t2 = performance.now();
       if (this.keys.has('w')) {
         const dir = M.mat4MulVec4(V.vec4(), this.model.requestInverseRotation(cam), backward);// forward is -Z in view space
         cam.position = V.vec4Add(V.vec4(), cam.position, dir);
@@ -122,24 +115,13 @@ export default class Controller {
         cam.position = V.vec4Add(V.vec4(), cam.position, dir);
         moveOps++;
       }
-      times['movement'] = performance.now() - t2;
-      times['movement_ops'] = moveOps;
+      this.debugEl.innerText += `\nCamera update : ${getDelta('camera-update')} ms`;
 
-
-      const t4 = performance.now();
-      // trigger rendering (render loop handles FPS/debug)
+      listenDelta('view-update')
       this.renderLoop();
-      times['renderFn'] = performance.now() - t4;
-
-      // print timing breakdown
-      const total = Object.values(times).reduce((s, v) => s + v, 0);
-      let out = `Model loop total: ${total.toFixed(2)} ms`;
-      for (const k of Object.keys(times)) {
-        out += `\n${k}: ${times[k].toFixed(2)} ms`;
-      }
-      out += `\n`;
-      this.debugEl.innerText += out;
+      this.debugEl.innerText += `\nView render : ${getDelta('view-update')} ms`;
       requestAnimationFrame(controllerLoop);
+      this.debugEl.innerText += `\nTotal loop : ${getDelta('controller-delta')} ms`;
     }
     requestAnimationFrame(controllerLoop);
     
@@ -150,9 +132,6 @@ export default class Controller {
     console.log("render loop")
     if (!this.debugEl) return;
 
-    const times: { [k: string]: number } = {};
-
-    const t0 = performance.now();
     // update scene objects; non-blocking
     const separatedObjects = this.model.getObjectsSeparated();
     this.view.registerSceneObjectsSeparated(
@@ -163,18 +142,12 @@ export default class Controller {
     if (this.model.updateStatic) {
       this.model.updateStatic = false;
     }
-    times['registerSceneObjects'] = performance.now() - t0;
 
-    const t1 = performance.now();
     const mainCam = this.model.getCamera(this.camId);
     if (!mainCam) { console.error("No main camera"); return }
     this.view.registerCamera(mainCam);
-    times['registerCamera'] = performance.now() - t1;
 
-    const t2 = performance.now();
     this.view.render();
-    times['view.render'] = performance.now() - t2;
-
     if (!(this.renderLoop as any).hasOwnProperty('lastTime')) {
       (this.renderLoop as any).lastTime = performance.now();
       (this.renderLoop as any).frameCount = 0;
@@ -191,12 +164,6 @@ export default class Controller {
     const fps = (this.renderLoop as any).fps;
     this.debugEl.innerText += `\nFPS: ${fps}`;
 
-    const total = Object.values(times).reduce((s, v) => s + v, 0);
-    let out = `\nRender loop total: ${total.toFixed(2)} ms`;
-    for (const k of Object.keys(times)) {
-      out += `\n${k}: ${times[k].toFixed(2)} ms`;
-    }
-    this.debugEl.innerText += out + `\n`;
   };
 
   stop() {

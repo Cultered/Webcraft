@@ -303,7 +303,7 @@ export class WebGPUView extends BaseView {
             if (this.debugEl) {
                 const staticCount = this.staticSceneObjects.length;
                 const nonStaticCount = this.nonStaticSceneObjects.length;
-                this.debugEl.innerText += `WebGPU ready\nObjects: ${objIndex} (${staticCount} static, ${nonStaticCount} non-static)\nBuffers: ${this.objectBuffers.size}`;
+                this.debugEl.innerText += `\nWebGPU ready\nObjects: ${objIndex} (${staticCount} static, ${nonStaticCount} non-static)\nBuffers: ${this.objectBuffers.size}`;
                 this.debugEl.innerText += `\nCamerar: x${this.camera.position[0].toFixed(2)} y${this.camera.position[1].toFixed(2)} z${this.camera.position[2].toFixed(2)}`;
             }
         } catch (e) {

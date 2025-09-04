@@ -31,3 +31,14 @@ export function ShowWebGPUInstructions() {
         console.error('WebGPU is not supported or enabled in your browser');
     }
 }
+
+let listenDeltaLastTime: { [processId: string]: number } = {};
+
+export function listenDelta(processId: string) {
+    listenDeltaLastTime[processId] = Date.now();
+}
+
+export function getDelta(processId: string): number {
+    const lastTime = listenDeltaLastTime[processId];
+    return lastTime !== undefined ? Date.now() - lastTime : 0;
+}
