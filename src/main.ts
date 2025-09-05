@@ -1,32 +1,18 @@
-import { createView } from './View/View';
+import { o11s } from './config/config';import { createView } from './View/View';
 import Model from './Model/Model';
+import Controller from './Controller/Controller';
 import MeshComponent from './Model/Components/MeshComponent';
 import { Entity } from './Model/Entity';
 import { generateSphereMesh, generateCubeMesh, LOD_MESH } from './Types/MeshUtils';
-import { setupDebugElement } from './misc/setupDebugElement';
 import * as M from './misc/mat4'
 import * as V from './misc/vec4';
-import Controller from './Controller/Controller';
 import Rotator from './Model/Components/Rotator';
-import { o11s } from './config/config';
-
-console.log('starting app');
-if (!document.querySelector('#app')) {
-    const div = document.createElement('div');
-    div.id = 'app';
-    document.body.appendChild(div);
-}
-const debugEl = setupDebugElement();
 
 (async () => {
     const view = await createView(o11s.USE_WEBGPU);
     const model = new Model();
-    const controller = new Controller(model, view, debugEl);
-
-
-
-    controller.debugMode(true);
-    view.setDebugElement(debugEl);
+    const controller = new Controller(model, view);
+    controller.hello()
 
     model.addCamera('main-camera', V.vec4(100, 100, 100), M.mat4Rotation(0, Math.PI, 0));
     const mainCam = model.getCamera('main-camera');

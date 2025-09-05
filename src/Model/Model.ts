@@ -4,7 +4,6 @@ import * as V from '../misc/vec4';
 import * as M from '../misc/mat4';
 import { Entity } from './Entity';
 import MeshComponent from './Components/MeshComponent';
-import type { Mesh } from '../Types/MeshType';
 import type { SceneObject } from '../Types/SceneObject';
 import { o11s } from '../config/config';
 
@@ -17,24 +16,6 @@ export default class Model {
     private chunks: Map<string, string[]> = new Map();
     private cachedVisibleSceneObjects: { static: SceneObject[], nonStatic: SceneObject[] } = { static: [], nonStatic: [] };
     private lastSceneObjectsCameraChunkKey?: string;
-
-    getMesh(id: string) {
-        for (const e of this.entities.values()) {
-            const mc = e.getComponent(MeshComponent) as MeshComponent | undefined;
-            if (mc && mc.mesh && mc.mesh.id === id) return mc.mesh;
-        }
-        return undefined;
-    }
-    getMeshes(): { [id: string]: Mesh } {
-        const out: { [id: string]: Mesh } = {};
-        for (const e of this.entities.values()) {
-            const mc = e.getComponent(MeshComponent) as MeshComponent | undefined;
-            if (mc && mc.mesh) {
-                out[mc.mesh.id] = mc.mesh;
-            }
-        }
-        return out;
-    }
 
     constructor() {
     }
@@ -65,15 +46,6 @@ export default class Model {
         return ent;
     }
 
-    setObjectPosition(id: string, newPos: Vector4) {
-        const ent = this.entities.get(id);
-        if (!ent) return false;
-        const oldChunk = ent.props.chunkKey;
-        ent.position = newPos;
-        this.updateChunkAssignment(ent, oldChunk);
-        return true;
-    }
-
     addCamera(id: string, position?: Vector4, rotation?: Matrix4x4) {
         const cam = new Entity(id, position ?? V.vec4(0, 0, 0, 0), rotation ?? M.mat4Identity(), V.vec4(1, 1, 1, 1));
         this.cameras.push(cam);
@@ -88,7 +60,6 @@ export default class Model {
         let newInverse = obj.props.inverseRotation
         if (obj.props.updateInverseRotation || !newInverse) {
             newInverse = M.mat4Inverse(M.mat4(), obj.rotation)
-            console.log("Computed new inverse rotation for ", obj.id, newInverse)
             obj.props.inverseRotation = newInverse
             obj.props.updateInverseRotation = false
         }
@@ -124,7 +95,7 @@ export default class Model {
         delete ent.props.chunkKey;
     }
 
-    private updateChunkAssignment(ent: Entity, oldChunkKey?: string) {
+    updateChunkAssignment(ent: Entity, oldChunkKey?: string) {
         const coords = this.chunkCoordsFromPosition(ent.position);
         const newKey = `${coords.x},${coords.y},${coords.z}`;
         const prevKey = oldChunkKey ?? ent.props.chunkKey;
@@ -167,10 +138,6 @@ export default class Model {
         return this.entities.get(id);
     }
 
-    /**
-     * Returns visible SceneObjects separated into static and nonStatic arrays, using the same algorithm as getVisibleEntities.
-     */
-
     public getObjectsSeparated(cameraId: string = 'main-camera'): { static: SceneObject[], nonStatic: SceneObject[] } {
         const camera = this.getCamera(cameraId);
         if (!camera) return { static: [], nonStatic: [] };
@@ -188,7 +155,8 @@ export default class Model {
                 nonStatic: this.cachedVisibleSceneObjects.nonStatic.slice()
             };
         }
-            console.log("recalc");
+        console.log("recalc");
+        this.updateStatic = true;
 
         const staticObjects: SceneObject[] = [];
         const nonStaticObjects: SceneObject[] = [];
@@ -212,11 +180,11 @@ export default class Model {
                                 const mc = ent && ent.getComponent(MeshComponent) as MeshComponent;
                                 if (dx * dx + dy * dy + dz * dz > o11s.LOD_DISTANCE * o11s.LOD_DISTANCE) {
                                     if (ent && mc) {
-                                        mc.LODReduce(ent);
+                                        mc.LODReduce(ent)
                                     }
                                 }
                                 else if (ent && mc) {
-                                    mc?.restoreMesh(ent)
+                                    mc.restoreMesh(ent)
                                 };
                             }
                             if (ent) {

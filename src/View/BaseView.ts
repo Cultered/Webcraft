@@ -27,7 +27,6 @@ export abstract class BaseView {
         scale: V.vec4(1, 1, 1, 1),
         props: {}
     };
-    protected debugEl?: HTMLDivElement;
     protected canvas?: HTMLCanvasElement;
     protected clearValue = { r: 0, g: 0., b: 0., a: 1. };
 
@@ -49,13 +48,6 @@ export abstract class BaseView {
      * Register scene objects separately for static/non-static optimization
      */
     public abstract registerSceneObjectsSeparated(staticObjects: SceneObject[], nonStaticObjects: SceneObject[], updateVertices: boolean): void;
-
-    /**
-     * Set the debug element for displaying debug information
-     */
-    public setDebugElement(el: HTMLDivElement): void {
-        this.debugEl = el;
-    }
 
     /**
      * Register a camera for the scene

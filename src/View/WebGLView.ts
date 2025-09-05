@@ -107,11 +107,9 @@ export class WebGLView extends BaseView {
             resizeCanvas();
 
             console.log('WebGL initialized successfully');
-            if (this.debugEl) this.debugEl.innerText += 'WebGL: ready';
 
         } catch (error) {
             console.error('Failed to initialize WebGL:', error);
-            if (this.debugEl) this.debugEl.innerText += 'WebGL init error: ' + (error as Error).message;
         }
     }
 
@@ -156,7 +154,6 @@ export class WebGLView extends BaseView {
     public render(): void {
         if (!this.gl || !this.glProgram || !this.glVertexArray) {
             console.warn('WebGL render skipped: context/program not ready');
-            if (this.debugEl) this.debugEl.innerText += 'WebGL render skipped: context/program not ready';
             return;
         }
 
@@ -220,16 +217,8 @@ export class WebGLView extends BaseView {
                 const indexType = (buf.indices instanceof Uint16Array) ? gl.UNSIGNED_SHORT : gl.UNSIGNED_INT;
                 gl.drawElements(gl.TRIANGLES, buf.indices.length, indexType, 0);
             }
-
-            if (this.debugEl) {
-                const staticCount = this.staticSceneObjects.length;
-                const nonStaticCount = this.nonStaticSceneObjects.length;
-                this.debugEl.innerText = `WebGL ready\nObjects: ${objIndex} (${staticCount} static, ${nonStaticCount} non-static)\nBuffers: ${this.glVertexBuffers.size}`;
-                this.debugEl.innerText += `\nCamera: x${this.camera.position[0].toFixed(2)} y${this.camera.position[1].toFixed(2)} z${this.camera.position[2].toFixed(2)}`;
-            }
         } catch (e) {
             console.error('WebGL render error:', e);
-            if (this.debugEl) this.debugEl.innerText += 'WebGL render error: ' + (e as Error).message;
         }
     }
 
