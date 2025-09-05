@@ -4,6 +4,7 @@ import type { SceneObject } from '../Types/SceneObject';
 import type { Mesh } from '../Types/MeshType';
 import { ShowWebGPUInstructions } from '../misc/misc';
 import * as M from '../misc/mat4';
+import debug from '../Debug/Debug';
 
 /**
  * WebGPU-based rendering implementation with static/non-static object optimization.
@@ -223,19 +224,6 @@ export class WebGPUView extends BaseView {
         if (this.device) this.createBuffersForMesh(meshId);
     }
 
-    /**
-     * Render the current scene using WebGPU with static/non-static optimization.
-     * 
-     * This method uses modern WebGPU features including storage buffers for object
-     * matrices and efficient command buffer recording for high-performance rendering.
-     * 
-     * Rendering order:
-     * 1. Static objects grouped by mesh (no state changes within mesh groups)
-     * 2. Non-static objects grouped by mesh (no state changes within mesh groups)
-     * 
-     * This approach minimizes GPU state changes while maintaining the optimization
-     * benefits of the static/non-static buffer separation.
-     */
     public render(): void {
         if (!this.device || !this.context || !this.renderPipeline || !this.depthTexture || !this.bindGroup || !this.msaaColorTexture) {
             console.warn('Render skipped: device/context/pipeline not ready');
@@ -298,6 +286,7 @@ export class WebGPUView extends BaseView {
         } catch (e) {
             console.error('Render error:', e);
         }
+        debug.log(`WebGPUView rendered ${this.staticSceneObjects.length} static objects; ${this.nonStaticSceneObjects.length} non-static objects.`);
     }
 
     private createBuffersForMesh(meshId: string): void {

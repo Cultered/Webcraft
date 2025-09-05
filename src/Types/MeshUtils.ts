@@ -94,7 +94,7 @@ export function generateSphereMesh(subdivisions: number, radius: number) {
 }
 
 export function generateCubeMesh(size: number) {
-    const hs = size / 2;
+    const hs = size;
     const vertices = [
         -hs, -hs, -hs,
         hs, -hs, -hs,

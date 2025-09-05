@@ -14,7 +14,7 @@ import Rotator from './Model/Components/Rotator';
     const controller = new Controller(model, view);
     controller.hello()
 
-    model.addCamera('main-camera', V.vec4(100, 100, 100), M.mat4Rotation(0, Math.PI, 0));
+    model.addCamera('main-camera', V.vec4(1000, 1000, 1000), M.mat4Rotation(0, Math.PI, 0));
     const mainCam = model.getCamera('main-camera');
     if (mainCam) {
         mainCam.props.model = model;
@@ -37,7 +37,7 @@ import Rotator from './Model/Components/Rotator';
         for (let j = 0; j < 100; j++) {
             for (let k = 0; k < 100; k++) {
                 const id = `obj-${i}-${j}-${k}`;
-                const ent = new Entity(id, V.vec4(i * 2, j * 2, k * 2), undefined, V.vec4(0.1, 0.1, 0.1, 1));
+                const ent = new Entity(id, V.vec4(i * 20, j * 20, k * 20), undefined, V.vec4(1, 1, 1, 1));
                 ent.addComponent(sphereComponent);
 
                 model.addExistingEntity(ent);
