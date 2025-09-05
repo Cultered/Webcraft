@@ -60,7 +60,7 @@ export default class Controller {
 
       listenDelta('view-update')
       this.renderLoop();
-      this.debugEl.innerText += `\nView render : ${getDelta('view-update')} ms`;
+      this.debugEl.innerText += `\nRender loop : ${getDelta('view-update')} ms`;
       requestAnimationFrame(controllerLoop);
       this.debugEl.innerText += `\nTotal loop : ${delta} s`;
     }
@@ -70,11 +70,12 @@ export default class Controller {
 
   // moved render loop from main.ts into controller so controller owns FPS/debug
   private renderLoop = () => {
-    console.log("render loop")
-    if (!this.debugEl) return;
-
+    if (!this.debugEl) this.debugEl = new HTMLElement();
     // update scene objects; non-blocking
+    listenDelta('model-getobjects')
     const separatedObjects = this.model.getObjectsSeparated();
+    this.debugEl.innerText += `\nModel get objects: ${getDelta('model-getobjects')} ms`;
+    listenDelta('view-register')
     this.view.registerSceneObjectsSeparated(
       separatedObjects.static,
       separatedObjects.nonStatic,
@@ -87,23 +88,12 @@ export default class Controller {
     const mainCam = this.model.getCamera(this.camId);
     if (!mainCam) { console.error("No main camera"); return }
     this.view.registerCamera(mainCam);
+    this.debugEl.innerText += `\nView register: ${getDelta('view-register')} ms`;
 
+    listenDelta('view-render')
     this.view.render();
-    if (!(this.renderLoop as any).hasOwnProperty('lastTime')) {
-      (this.renderLoop as any).lastTime = performance.now();
-      (this.renderLoop as any).frameCount = 0;
-      (this.renderLoop as any).fps = 0;
-    }
-    (this.renderLoop as any).frameCount++;
-    const now = performance.now();
-    const lastTime = (this.renderLoop as any).lastTime;
-    if (now - lastTime >= 1000) {
-      (this.renderLoop as any).fps = (this.renderLoop as any).frameCount;
-      (this.renderLoop as any).frameCount = 0;
-      (this.renderLoop as any).lastTime = now;
-    }
-    const fps = (this.renderLoop as any).fps;
-    this.debugEl.innerText += `\nFPS: ${fps}`;
+
+    this.debugEl.innerText += `\nView render: ${getDelta('view-render')} ms`;
 
   };
 

@@ -28,7 +28,7 @@ const debugEl = setupDebugElement();
     controller.debugMode(true);
     view.setDebugElement(debugEl);
 
-    model.addCamera('main-camera', V.vec4(0, 0, 0), M.mat4Rotation(0, Math.PI, 0));
+    model.addCamera('main-camera', V.vec4(100, 100, 100), M.mat4Rotation(0, Math.PI, 0));
     const mainCam = model.getCamera('main-camera');
     if (mainCam) {
         mainCam.props.model = model;

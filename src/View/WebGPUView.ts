@@ -4,6 +4,7 @@ import type { SceneObject } from '../Types/SceneObject';
 import type { Mesh } from '../Types/MeshType';
 import { ShowWebGPUInstructions } from '../misc/misc';
 import * as M from '../misc/mat4';
+import { listenDelta, getDelta } from '../misc/misc';
 
 /**
  * WebGPU-based rendering implementation with static/non-static object optimization.
@@ -39,7 +40,6 @@ export class WebGPUView extends BaseView {
     private depthTexture?: GPUTexture;
     private renderPipeline?: GPURenderPipeline;
     private objectBuffers = new Map<string, { vertexBuffer: GPUBuffer; indexBuffer: GPUBuffer; indices: Uint32Array | Uint16Array }>();
-    private meshBatches = new Map<string, { base: number; count: number }>();
     private staticMeshBatches = new Map<string, { base: number; count: number }>();
     private nonStaticMeshBatches = new Map<string, { base: number; count: number }>();
     private nonStaticBaseOffset = 0;
@@ -240,6 +240,7 @@ export class WebGPUView extends BaseView {
      * benefits of the static/non-static buffer separation.
      */
     public render(): void {
+        listenDelta('render-inside')
         if (!this.device || !this.context || !this.renderPipeline || !this.depthTexture || !this.bindGroup || !this.msaaColorTexture) {
             console.warn('Render skipped: device/context/pipeline not ready');
             if (this.debugEl) this.debugEl.innerText += 'Render skipped: device/context/pipeline not ready';
@@ -267,6 +268,7 @@ export class WebGPUView extends BaseView {
         };
 
         try {
+            listenDelta('render-try')
             const commandEncoder = this.device.createCommandEncoder();
             const passEncoder = commandEncoder.beginRenderPass(renderPassDescriptor);
             passEncoder.setPipeline(this.renderPipeline);
@@ -276,6 +278,7 @@ export class WebGPUView extends BaseView {
             let objIndex = 0;
             
             // First, draw all static objects grouped by mesh
+            listenDelta('render-static')
             for (const [meshId, batch] of this.staticMeshBatches) {
                 const buf = this.objectBuffers.get(meshId);
                 if (!buf) continue;
@@ -285,7 +288,9 @@ export class WebGPUView extends BaseView {
                 passEncoder.drawIndexed(buf.indices.length, batch.count, 0, 0, batch.base);
                 objIndex += batch.count;
             }
+            this.debugEl!.innerText += `\nStatic render: ${getDelta('render-static')} ms`;
             
+            listenDelta('render-nonstatic')
             // Then, draw all non-static objects grouped by mesh
             for (const [meshId, batch] of this.nonStaticMeshBatches) {
                 const buf = this.objectBuffers.get(meshId);
@@ -296,10 +301,11 @@ export class WebGPUView extends BaseView {
                 passEncoder.drawIndexed(buf.indices.length, batch.count, 0, 0, batch.base);
                 objIndex += batch.count;
             }
+            this.debugEl!.innerText += `\nNon-static render: ${getDelta('render-nonstatic')} ms`;
 
             passEncoder.end();
             this.device.queue.submit([commandEncoder.finish()]);
-
+            this.debugEl!.innerText += `\nRender try: ${getDelta('render-try')} ms`;
             if (this.debugEl) {
                 const staticCount = this.staticSceneObjects.length;
                 const nonStaticCount = this.nonStaticSceneObjects.length;
@@ -310,6 +316,7 @@ export class WebGPUView extends BaseView {
             console.error('Render error:', e);
             if (this.debugEl) this.debugEl.innerText += 'Render error: ' + (e as Error).message;
         }
+        this.debugEl!.innerText += `\nRender inside: ${getDelta('render-inside')} ms`;
     }
 
     private createBuffersForMesh(meshId: string): void {
@@ -405,7 +412,6 @@ export class WebGPUView extends BaseView {
 
         const total = staticObjs.length + nonStaticObjs.length;
         const out = new Float32Array(total * 16);
-        this.meshBatches.clear();
         this.staticMeshBatches.clear();
         this.nonStaticMeshBatches.clear();
         
@@ -442,27 +448,6 @@ export class WebGPUView extends BaseView {
             cursor += arr.length;
         }
         
-        // For backward compatibility, maintain the combined meshBatches
-        for (const [meshId, staticBatch] of this.staticMeshBatches) {
-            const nonStaticBatch = this.nonStaticMeshBatches.get(meshId);
-            if (nonStaticBatch) {
-                // If both static and non-static exist, combine them
-                this.meshBatches.set(meshId, { 
-                    base: staticBatch.base, 
-                    count: staticBatch.count + nonStaticBatch.count 
-                });
-            } else {
-                // Only static exists
-                this.meshBatches.set(meshId, staticBatch);
-            }
-        }
-        
-        // Add non-static only meshes
-        for (const [meshId, nonStaticBatch] of this.nonStaticMeshBatches) {
-            if (!this.staticMeshBatches.has(meshId)) {
-                this.meshBatches.set(meshId, nonStaticBatch);
-            }
-        }
         
         return out;
     }
@@ -517,24 +502,5 @@ export class WebGPUView extends BaseView {
             cursor += arr.length;
         }
         
-        // Update combined meshBatches for backward compatibility
-        for (const [meshId, staticBatch] of this.staticMeshBatches) {
-            const nonStaticBatch = this.nonStaticMeshBatches.get(meshId);
-            if (nonStaticBatch) {
-                this.meshBatches.set(meshId, { 
-                    base: staticBatch.base, 
-                    count: staticBatch.count + nonStaticBatch.count 
-                });
-            } else {
-                this.meshBatches.set(meshId, staticBatch);
-            }
-        }
-        
-        // Add non-static only meshes
-        for (const [meshId, nonStaticBatch] of this.nonStaticMeshBatches) {
-            if (!this.staticMeshBatches.has(meshId)) {
-                this.meshBatches.set(meshId, nonStaticBatch);
-            }
-        }
     }
 }

@@ -15,9 +15,8 @@ export default class Model {
     public updateStatic: boolean = true;
     private cameras: Entity[] = [];
     private chunks: Map<string, string[]> = new Map();
-    private cachedVisibleObjects: string[] = [];
-    private lastCameraChunkKey?: string;
-    public onSceneObjectsUpdated?: (staticObjects: SceneObject[], nonStaticObjects: SceneObject[], updateVertices: boolean) => void;
+    private cachedVisibleSceneObjects: { static: SceneObject[], nonStatic: SceneObject[] } = { static: [], nonStatic: [] };
+    private lastSceneObjectsCameraChunkKey?: string;
 
     getMesh(id: string) {
         for (const e of this.entities.values()) {
@@ -66,85 +65,6 @@ export default class Model {
         return ent;
     }
 
-    getObjects() {
-        const allObjects = this.getAllObjectsInternal();
-        return allObjects.static.concat(allObjects.nonStatic);
-    }
-
-    getObjectsSeparated(): { static: SceneObject[], nonStatic: SceneObject[] } {
-        return this.getAllObjectsInternal();
-    }
-
-    private getAllObjectsInternal(): { static: SceneObject[], nonStatic: SceneObject[] } {
-        const camera = this.getCamera('main-camera');
-        const allEntities = !camera || !o11s.CPU_CHUNKS ? 
-            Array.from(this.entities.values()) : 
-            this.getVisibleEntities(camera);
-
-        const staticObjects: SceneObject[] = [];
-        const nonStaticObjects: SceneObject[] = [];
-
-        for (const entity of allEntities) {
-            const sceneObject = this.entityToSceneObject(entity);
-            if (entity.isStatic) {
-                staticObjects.push(sceneObject);
-            } else {
-                nonStaticObjects.push(sceneObject);
-            }
-        }
-
-        return { static: staticObjects, nonStatic: nonStaticObjects };
-    }
-
-    private getVisibleEntities(camera: Entity): Entity[] {
-        const camPos = camera.position;
-        const camChunk = this.chunkCoordsFromPosition(camPos);
-        const camChunkKey = `${camChunk.x},${camChunk.y},${camChunk.z}`;
-
-        let camRotInv:Matrix4x4 = M.mat4Inverse(M.mat4(), camera.rotation)
-        let cameraForward = M.mat4MulVec4(V.vec4(),camRotInv,V.vec4Neg(V.vec4(),V.forward()));
-
-        if (this.lastCameraChunkKey === camChunkKey && !o11s.CPU_SOFT_FRUSTUM_CULLING) {
-            return this.cachedVisibleObjects.map(id => this.entities.get(id)).filter(Boolean) as Entity[];
-        }
-        this.updateStatic = true;//PLS FIX ME
-
-        const collected = new Set<Entity>();
-        for (let dx = -o11s.RENDER_DISTANCE; dx <= o11s.RENDER_DISTANCE; dx++) {
-            for (let dy = -o11s.RENDER_DISTANCE; dy <= o11s.RENDER_DISTANCE; dy++) {
-                for (let dz = -o11s.RENDER_DISTANCE; dz <= o11s.RENDER_DISTANCE; dz++) {
-                    if (dx * dx + dy * dy + dz * dz > o11s.RENDER_DISTANCE * o11s.RENDER_DISTANCE) continue;
-                    if (o11s.CPU_SOFT_FRUSTUM_CULLING) {
-                        if (V.vec4Dot(cameraForward, V.vec4(dx, dy, dz, 0)) < -1) continue;
-                    }
-                    const key = `${camChunk.x + dx},${camChunk.y + dy},${camChunk.z + dz}`;
-                    const ids = this.chunks.get(key);
-                    if (ids) {
-                        ids.forEach(id => {
-                            const ent = this.getEntityById(id);
-                            if (o11s.CPU_LOD) {
-                                const mc = ent && ent.getComponent(MeshComponent) as MeshComponent;
-                                if (dx * dx + dy * dy + dz * dz > o11s.LOD_DISTANCE * o11s.LOD_DISTANCE) {
-                                    if (ent && mc) {
-                                        mc.LODReduce(ent);
-                                    }
-                                }
-                                else if (ent && mc) {
-                                    mc?.restoreMesh(ent)
-                                };
-                            }
-                            if (ent) collected.add(ent);
-                        });
-                    }
-                }
-            }
-        }
-
-        this.cachedVisibleObjects = Array.from(collected).map(e => e.id);
-        this.lastCameraChunkKey = camChunkKey;
-        return Array.from(collected);
-    }
-
     setObjectPosition(id: string, newPos: Vector4) {
         const ent = this.entities.get(id);
         if (!ent) return false;
@@ -167,8 +87,8 @@ export default class Model {
     requestInverseRotation(obj: SceneObject): Matrix4x4 {
         let newInverse = obj.props.inverseRotation
         if (obj.props.updateInverseRotation || !newInverse) {
-            newInverse = M.mat4Inverse(M.mat4(),obj.rotation)
-            console.log("Computed new inverse rotation for ",obj.id,newInverse)
+            newInverse = M.mat4Inverse(M.mat4(), obj.rotation)
+            console.log("Computed new inverse rotation for ", obj.id, newInverse)
             obj.props.inverseRotation = newInverse
             obj.props.updateInverseRotation = false
         }
@@ -245,5 +165,78 @@ export default class Model {
 
     getEntityById(id: string) {
         return this.entities.get(id);
+    }
+
+    /**
+     * Returns visible SceneObjects separated into static and nonStatic arrays, using the same algorithm as getVisibleEntities.
+     */
+
+    public getObjectsSeparated(cameraId: string = 'main-camera'): { static: SceneObject[], nonStatic: SceneObject[] } {
+        const camera = this.getCamera(cameraId);
+        if (!camera) return { static: [], nonStatic: [] };
+
+        const camPos = camera.position;
+        const camChunk = this.chunkCoordsFromPosition(camPos);
+        const camChunkKey = `${camChunk.x},${camChunk.y},${camChunk.z}`;
+
+        let camRotInv: Matrix4x4 = M.mat4Inverse(M.mat4(), camera.rotation);
+        let cameraForward = M.mat4MulVec4(V.vec4(), camRotInv, V.vec4Neg(V.vec4(), V.forward()));
+
+        if (this.lastSceneObjectsCameraChunkKey === camChunkKey && !o11s.CPU_SOFT_FRUSTUM_CULLING) {
+            return {
+                static: this.cachedVisibleSceneObjects.static.slice(),
+                nonStatic: this.cachedVisibleSceneObjects.nonStatic.slice()
+            };
+        }
+            console.log("recalc");
+
+        const staticObjects: SceneObject[] = [];
+        const nonStaticObjects: SceneObject[] = [];
+
+        const seen = new Set<string>();
+        for (let dx = -o11s.RENDER_DISTANCE; dx <= o11s.RENDER_DISTANCE; dx++) {
+            for (let dy = -o11s.RENDER_DISTANCE; dy <= o11s.RENDER_DISTANCE; dy++) {
+                for (let dz = -o11s.RENDER_DISTANCE; dz <= o11s.RENDER_DISTANCE; dz++) {
+                    if (dx * dx + dy * dy + dz * dz > o11s.RENDER_DISTANCE * o11s.RENDER_DISTANCE) continue;
+                    if (o11s.CPU_SOFT_FRUSTUM_CULLING) {
+                        if (V.vec4Dot(cameraForward, V.vec4(dx, dy, dz, 0)) < -1) continue;
+                    }
+                    const key = `${camChunk.x + dx},${camChunk.y + dy},${camChunk.z + dz}`;
+                    const ids = this.chunks.get(key);
+                    if (ids) {
+                        ids.forEach(id => {
+                            if (seen.has(id)) return;
+                            seen.add(id);
+                            const ent = this.getEntityById(id);
+                            if (o11s.CPU_LOD) {
+                                const mc = ent && ent.getComponent(MeshComponent) as MeshComponent;
+                                if (dx * dx + dy * dy + dz * dz > o11s.LOD_DISTANCE * o11s.LOD_DISTANCE) {
+                                    if (ent && mc) {
+                                        mc.LODReduce(ent);
+                                    }
+                                }
+                                else if (ent && mc) {
+                                    mc?.restoreMesh(ent)
+                                };
+                            }
+                            if (ent) {
+                                const sceneObject = this.entityToSceneObject(ent);
+                                if (ent.isStatic) {
+                                    staticObjects.push(sceneObject);
+                                } else {
+                                    nonStaticObjects.push(sceneObject);
+                                }
+                            }
+                        });
+                    }
+                }
+            }
+        }
+        this.cachedVisibleSceneObjects = {
+            static: staticObjects.slice(),
+            nonStatic: nonStaticObjects.slice()
+        };
+        this.lastSceneObjectsCameraChunkKey = camChunkKey;
+        return { static: staticObjects, nonStatic: nonStaticObjects };
     }
 }
