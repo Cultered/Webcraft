@@ -36,16 +36,19 @@ export default class Controller {
   }
 
   private controllerLoop = () => {
-    debug.log(`Controller ready`);
-    this.model.update(this.delta());
-    debug.log(this.model.getCamera(this.camId)?.position.toString() || "No camera");
-    this.renderLoop();
-    requestAnimationFrame(this.controllerLoop);
-    debug.flush();
+    debug.perf("controller-loop", () => {
+      debug.log(`Controller ready`);
+      debug.perf("model-update",()=>this.model.update(this.delta()));
+      debug.log(this.model.getCamera(this.camId)?.position.reduce((prev, val) => prev + val.toFixed(2) + " ", "") || "No camera");
+      this.renderLoop();
+      requestAnimationFrame(this.controllerLoop);
+      debug.flush();
+    });
   }
 
   private renderLoop = () => {
     const separatedObjects = debug.perf('model-objects', () => this.model.getObjectsSeparated());
+    console.log(`Rendering ${separatedObjects.static.length} static and ${separatedObjects.nonStatic.length} non-static objects.`); 
     debug.perf('view-register', () =>
       this.view.registerSceneObjectsSeparated(
         separatedObjects.static,

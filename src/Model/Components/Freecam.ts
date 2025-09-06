@@ -35,7 +35,7 @@ export default class Freecam implements Component {
   update(entity: Entity, deltaMs?: number) {
     if (!this.cam) return;
     const delta = (deltaMs ?? 0) / 1000;
-    const speedBase = this.keys.has('shift') ? 20 : 3;
+    const speedBase = this.keys.has('shift') ? 100 : 3;
     const forwardVec = vec4Scale(vec4(), forward(), speedBase * delta);
     const rightVec = vec4Scale(vec4(), right(), speedBase * delta);
     const upVec = vec4Scale(vec4(), up(), speedBase * delta);

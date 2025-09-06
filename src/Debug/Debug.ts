@@ -2,6 +2,7 @@ class Debug {
     public dlog: string[] = [];
     public dlogElement: HTMLDivElement;
     public plog: Record<string, number[]> = {};
+    private callCounts: Record<string, { count: number, lastTime: number, cps: number }> = {};
     public plogElement: HTMLDivElement;
     private selectedKey: string | null = null;
     private graphCanvas: HTMLCanvasElement;
@@ -55,6 +56,19 @@ class Debug {
         if (!this.plog[name]) this.plog[name] = [];
         this.plog[name].push(elapsed);
         if (this.plog[name].length > 100) this.plog[name].shift();
+        // Calls per second tracking
+        const now = performance.now();
+        if (!this.callCounts[name]) {
+            this.callCounts[name] = { count: 1, lastTime: now, cps: 0 };
+        } else {
+            const info = this.callCounts[name];
+            info.count++;
+            if (now - info.lastTime >= 1000) {
+                info.cps = info.count / ((now - info.lastTime) / 1000);
+                info.count = 0;
+                info.lastTime = now;
+            }
+        }
         this.updateProfilerUI();
         return result;
     }
@@ -119,7 +133,11 @@ class Debug {
         });
         ctx.stroke();
         ctx.fillStyle = 'white';
-        ctx.fillText(`${this.selectedKey}: min=${min.toFixed(2)} max=${max.toFixed(2)}`, 10, 10);
+        let cps = 0;
+        if (this.selectedKey && this.callCounts[this.selectedKey]) {
+            cps = this.callCounts[this.selectedKey].cps;
+        }
+        ctx.fillText(`${this.selectedKey}: min=${min.toFixed(2)} max=${max.toFixed(2)} calls/s=${cps.toFixed(1)}`, 10, 10);
     }
     private setupDebugLogElement(): HTMLDivElement {
         const debugEl = document.createElement('div');
