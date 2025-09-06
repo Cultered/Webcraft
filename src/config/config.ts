@@ -6,6 +6,6 @@ export const o11s: Optimizations = {
     RENDER_DISTANCE: 5,
     LOD_DISTANCE: 1,
     CPU_SOFT_FRUSTUM_CULLING: false,//needs fixing
-    CPU_LOD: false,//needs mega fixing
+    CPU_LOD: true,//needs mega fixing
     USE_WEBGPU:true
 }
