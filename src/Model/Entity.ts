@@ -9,12 +9,13 @@ export class Entity {
     id: string;
     position: Vector4;
     rotation: Matrix4x4;
+    inverseRotation?: Matrix4x4;
+    updateInverseRotation: boolean = true; // if true, inverse rotation will be recalculated on next request
     scale: Vector4;
     isStatic: boolean = true;
     // components keyed by constructor name for fast lookup
     components: Map<string, Component> = new Map();
-    // keep props for backwards-compatibility with existing View code
-    props: any = {};
+    chunkKey?: string;
 
     constructor(id: string, position?: Vector4, rotation?: Matrix4x4, scale?: Vector4) {
         this.id = id;
@@ -24,10 +25,10 @@ export class Entity {
     }
 
     addComponent<T extends Component>(c: T): T {
-        if(c.update) this.isStatic = false;
+        if (c.update) this.isStatic = false;
         const key = (c as any).constructor?.name ?? String(Math.random());
         this.components.set(key, c);
-        c.start(this);
+        if (c.start) c.start(this);
         return c;
     }
 
@@ -44,6 +45,13 @@ export class Entity {
             else out.push(null);
         }
         return out;
+    }
+    requestInverseRotation = () => {
+        if (this) {
+            this.inverseRotation = M.mat4Inverse(M.mat4(), this.rotation);
+            this.updateInverseRotation = false;
+        }
+        return this.inverseRotation ?? M.mat4Identity();
     }
 }
 

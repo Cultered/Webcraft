@@ -1,7 +1,7 @@
 import { Entity } from '../Entity';
 
 export interface Component {
-    start(entity:Entity):any;
+    start?(entity:Entity):any;
     update?(entity: Entity, deltaMs?: number): any;
 }
 

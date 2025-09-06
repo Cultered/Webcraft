@@ -17,7 +17,6 @@ import Rotator from './Model/Components/Rotator';
     model.addCamera('main-camera', V.vec4(1000, 1000, 1000), M.mat4Rotation(0, Math.PI, 0));
     const mainCam = model.getCamera('main-camera');
     if (mainCam) {
-        mainCam.props.model = model;
         const canvasEl = document.querySelector('#main-canvas') as HTMLCanvasElement;
         const Freecam = (await import('./Model/Components/Freecam')).default;
         mainCam.addComponent(new Freecam(canvasEl));
@@ -29,9 +28,7 @@ import Rotator from './Model/Components/Rotator';
     view.uploadMeshToGPU(sphereMesh.id, sphereMesh.vertices, sphereMesh.indices);
     view.uploadMeshToGPU(cubeMesh.id, cubeMesh.vertices, cubeMesh.indices);
     view.uploadMeshToGPU(LOD_MESH.id, LOD_MESH.vertices, LOD_MESH.indices);
-
-    const sphereComponent = new MeshComponent(sphereMesh, true);
-    //const cubeComponent = new MeshComponent(cubeMesh, true);
+                const sphereComponent = new MeshComponent(sphereMesh, true);
 
     for (let i = 0; i < 100; i++) {
         for (let j = 0; j < 100; j++) {

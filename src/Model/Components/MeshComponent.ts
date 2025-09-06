@@ -1,19 +1,20 @@
 import type { Component } from './Component';
-import { Entity } from '../Entity';
 import type { Mesh } from '../../Types/MeshType';
 
 export class MeshComponent implements Component {
     mesh: Mesh;
+    isLOD: boolean=false
     useLOD: boolean
-    constructor(mesh: Mesh, useLOD: boolean) { this.mesh = mesh; this.useLOD = useLOD }
-    start(entity: Entity) {
-        entity.props.mesh = this.mesh.id
+    constructor(mesh: Mesh, useLOD: boolean) { this.mesh = mesh; this.useLOD = useLOD; }
+
+    start() {
+        this.isLOD = false;
     }
-    restoreMesh(entity: Entity) {
-        entity.props.mesh = this.mesh.id
+    restoreMesh() {
+        if (this.isLOD) { this.isLOD = false; }
     }
-    LODReduce(entity: Entity) {
-        if (this.useLOD) { entity.props.mesh = 'builtin-lod-mesh' }
+    LODReduce() {
+        if (this.useLOD) { this.isLOD = true }
     }
 }
 

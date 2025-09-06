@@ -1,8 +1,8 @@
-import type { SceneObject } from '../Types/SceneObject';
 import type { Mesh } from '../Types/MeshType';
+import { radians } from '../misc/misc';
+import Entity from '../Model/Entity';
 import * as V from '../misc/vec4';
 import * as M from '../misc/mat4';
-import { radians } from '../misc/misc';
 
 /**
  * Base interface/abstract class for rendering views
@@ -15,18 +15,12 @@ export abstract class BaseView {
     protected near = 0.1;
     protected far = 1000;
     protected meshes: { [id: string]: Mesh } = {};
-    protected sceneObjects: SceneObject[] = [];
-    protected staticSceneObjects: SceneObject[] = [];
-    protected nonStaticSceneObjects: SceneObject[] = [];
-    protected lastSceneObjectsRef?: SceneObject[];
+    protected sceneObjects: Entity[] = [];
+    protected staticSceneObjects: Entity[] = [];
+    protected nonStaticSceneObjects: Entity[] = [];
+    protected lastSceneObjectsRef?: Entity[];
     protected lastCameraKey?: string;
-    protected camera: SceneObject = {
-        id: 'viewCamera',
-        position: V.vec4(0, 0, 0, 1),
-        rotation: M.mat4Identity(),
-        scale: V.vec4(1, 1, 1, 1),
-        props: {}
-    };
+    protected camera: Entity = new Entity('default-camera', V.vec4(), M.mat4(), V.vec4(1, 1, 1, 1));
     protected canvas?: HTMLCanvasElement;
     protected clearValue = { r: 0, g: 0., b: 0., a: 1. };
 
@@ -47,12 +41,12 @@ export abstract class BaseView {
     /**
      * Register scene objects separately for static/non-static optimization
      */
-    public abstract registerSceneObjectsSeparated(staticObjects: SceneObject[], nonStaticObjects: SceneObject[], updateVertices: boolean): void;
+    public abstract registerSceneObjectsSeparated(staticObjects: Entity[], nonStaticObjects: Entity[], updateVertices: boolean): void;
 
     /**
      * Register a camera for the scene
      */
-    public abstract registerCamera(camera: SceneObject): void;
+    public abstract registerCamera(camera: Entity): void;
 
     /**
      * Upload meshes to the GPU

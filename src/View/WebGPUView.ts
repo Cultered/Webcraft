@@ -1,10 +1,11 @@
 import { BaseView } from './BaseView';
 import { renderer } from './shaders/default-wgsl-renderer';
-import type { SceneObject } from '../Types/SceneObject';
 import type { Mesh } from '../Types/MeshType';
 import { ShowWebGPUInstructions } from '../misc/misc';
 import * as M from '../misc/mat4';
 import debug from '../Debug/Debug';
+import type Entity from '../Model/Entity';
+import MeshComponent from '../Model/Components/MeshComponent';
 
 /**
  * WebGPU-based rendering implementation with static/non-static object optimization.
@@ -182,7 +183,7 @@ export class WebGPUView extends BaseView {
      * @param nonStaticObjects - Objects that may change and need regular updates
      * @param updateStatic - Whether to update static objects (use true for initial setup or when static objects change)
      */
-    public registerSceneObjectsSeparated(staticObjects: SceneObject[], nonStaticObjects: SceneObject[], updateStatic: boolean): void {
+    public registerSceneObjectsSeparated(staticObjects: Entity[], nonStaticObjects: Entity[], updateStatic: boolean): void {
         if (!this.device) throw new Error('WebGPU device not initialized');
 
         this.staticSceneObjects = staticObjects;
@@ -197,7 +198,7 @@ export class WebGPUView extends BaseView {
         }
     }
 
-    public registerCamera(camera: SceneObject): void {
+    public registerCamera(camera: Entity): void {
         const camKey = `${camera.position[0]},${camera.position[1]},${camera.position[2]}|${JSON.stringify(camera.rotation)}`;
         if (camKey === this.lastCameraKey) {
             this.camera = camera;
@@ -304,7 +305,7 @@ export class WebGPUView extends BaseView {
     }
 
 
-    private updateObjectStorageBufferWithSeparation(staticObjects: SceneObject[], nonStaticObjects: SceneObject[]): void {
+    private updateObjectStorageBufferWithSeparation(staticObjects: Entity[], nonStaticObjects: Entity[]): void {
         if (!this.device) throw new Error('Device not initialized');
         const totalObjectCount = staticObjects.length + nonStaticObjects.length;
         // Ensure storage buffer is large enough; if we recreated it we must also rebuild the bind group
@@ -330,7 +331,7 @@ export class WebGPUView extends BaseView {
         }
     }
 
-    private updateNonStaticObjectsOnly(nonStaticObjects: SceneObject[]): void {
+    private updateNonStaticObjectsOnly(nonStaticObjects: Entity[]): void {
         if (!this.device) throw new Error('Device not initialized');
 
         if (!this.objectStorageBuffer) {
@@ -360,19 +361,19 @@ export class WebGPUView extends BaseView {
         this.updateNonStaticBatches(nonStaticObjects);
     }
 
-    private buildBatchesAndMatrixBuffer(staticObjs: SceneObject[], nonStaticObjs: SceneObject[]) {
+    private buildBatchesAndMatrixBuffer(staticObjs: Entity[], nonStaticObjs: Entity[]) {
         // Group objects by mesh, keeping static and non-static separate
-        const staticGroups = new Map<string, SceneObject[]>();
-        const nonStaticGroups = new Map<string, SceneObject[]>();
+        const staticGroups = new Map<string, Entity[]>();
+        const nonStaticGroups = new Map<string, Entity[]>();
         
-        const pushStatic = (o: SceneObject) => {
-            const id = o.props.mesh!;
+        const pushStatic = (o: Entity) => {
+            const id = o.getComponent(MeshComponent)?.mesh.id!;
             if (!staticGroups.has(id)) staticGroups.set(id, []);
             staticGroups.get(id)!.push(o);
         };
         
-        const pushNonStatic = (o: SceneObject) => {
-            const id = o.props.mesh!;
+        const pushNonStatic = (o: Entity) => {
+            const id = o.getComponent(MeshComponent)?.mesh.id!;
             if (!nonStaticGroups.has(id)) nonStaticGroups.set(id, []);
             nonStaticGroups.get(id)!.push(o);
         };
@@ -422,12 +423,12 @@ export class WebGPUView extends BaseView {
         return out;
     }
 
-    private buildNonStaticMatrixBuffer(nonStaticObjs: SceneObject[]): Float32Array {
+    private buildNonStaticMatrixBuffer(nonStaticObjs: Entity[]): Float32Array {
         // Group non-static objects by mesh
-        const nonStaticGroups = new Map<string, SceneObject[]>();
+        const nonStaticGroups = new Map<string, Entity[]>();
         
-        const pushNonStatic = (o: SceneObject) => {
-            const id = o.props.mesh!;
+        const pushNonStatic = (o: Entity) => {
+            const id = o.getComponent(MeshComponent)?.mesh.id!;
             if (!nonStaticGroups.has(id)) nonStaticGroups.set(id, []);
             nonStaticGroups.get(id)!.push(o);
         };
@@ -452,12 +453,12 @@ export class WebGPUView extends BaseView {
         return out;
     }
 
-    private updateNonStaticBatches(nonStaticObjs: SceneObject[]): void {
+    private updateNonStaticBatches(nonStaticObjs: Entity[]): void {
         // Group non-static objects by mesh and update batch information
-        const nonStaticGroups = new Map<string, SceneObject[]>();
+        const nonStaticGroups = new Map<string, Entity[]>();
         
-        const pushNonStatic = (o: SceneObject) => {
-            const id = o.props.mesh!;
+        const pushNonStatic = (o: Entity) => {
+            const id = o.getComponent(MeshComponent)?.mesh.id!;
             if (!nonStaticGroups.has(id)) nonStaticGroups.set(id, []);
             nonStaticGroups.get(id)!.push(o);
         };

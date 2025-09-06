@@ -1,8 +1,9 @@
 import { BaseView } from './BaseView';
 import { vertexShader, fragmentShader } from './shaders/default-glsl-renderer';
-import type { SceneObject } from '../Types/SceneObject';
 import type { Mesh } from '../Types/MeshType';
+import Entity from '../Model/Entity';
 import * as M from '../misc/mat4';
+import MeshComponent from '../Model/Components/MeshComponent';
 
 /**
  * WebGL-based rendering implementation.
@@ -114,7 +115,7 @@ export class WebGLView extends BaseView {
     }
 
 
-    public registerSceneObjectsSeparated(staticObjects: SceneObject[], nonStaticObjects: SceneObject[], _updateVertices: boolean): void {
+    public registerSceneObjectsSeparated(staticObjects: Entity[], nonStaticObjects: Entity[], _updateVertices: boolean): void {
         if (!this.gl) throw new Error('WebGL context not initialized');
         
         this.staticSceneObjects = staticObjects;
@@ -123,7 +124,7 @@ export class WebGLView extends BaseView {
         // The optimization here is that we know which objects are static vs dynamic for batching/sorting
     }
 
-    public registerCamera(camera: SceneObject): void {
+    public registerCamera(camera: Entity): void {
         const camKey = `${camera.position[0]},${camera.position[1]},${camera.position[2]}|${JSON.stringify(camera.rotation)}`;
         if (camKey === this.lastCameraKey) {
             this.camera = camera;
@@ -187,10 +188,11 @@ export class WebGLView extends BaseView {
 
             for (const obj of allObjects) {
                 objIndex++;
-                
+                if (!obj.getComponent(MeshComponent)) continue;
+
                 // Switch mesh if needed
-                if (obj.props.mesh !== currentMeshId) {
-                    currentMeshId = obj.props.mesh!;
+                if (obj.getComponent(MeshComponent)?.mesh.id !== currentMeshId) {
+                    currentMeshId = obj.getComponent(MeshComponent)?.mesh.id!;
                     buf = this.glVertexBuffers.get(currentMeshId);
                     if (!buf) continue;
 

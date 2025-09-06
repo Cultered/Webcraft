@@ -7,5 +7,5 @@ export const o11s: Optimizations = {
     LOD_DISTANCE: 1,
     CPU_SOFT_FRUSTUM_CULLING: false,//needs fixing
     CPU_LOD: true,//needs mega fixing
-    USE_WEBGPU:true
+    USE_WEBGPU:true//WebGl temporarily broken
 }

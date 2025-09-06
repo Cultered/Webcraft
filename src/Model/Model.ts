@@ -4,7 +4,6 @@ import * as V from '../misc/vec4';
 import * as M from '../misc/mat4';
 import { Entity } from './Entity';
 import MeshComponent from './Components/MeshComponent';
-import type { SceneObject } from '../Types/SceneObject';
 import { o11s } from '../config/config';
 
 
@@ -14,7 +13,7 @@ export default class Model {
     public updateStatic: boolean = true;
     private cameras: Entity[] = [];
     private chunks: Map<string, string[]> = new Map();
-    private cachedVisibleSceneObjects: { static: SceneObject[], nonStatic: SceneObject[] } = { static: [], nonStatic: [] };
+    private cachedVisibleSceneObjects: { static: Entity[], nonStatic: Entity[] } = { static: [], nonStatic: [] };
     private lastSceneObjectsCameraChunkKey?: string;
 
     constructor() {
@@ -57,12 +56,12 @@ export default class Model {
         return this.cameras.find(camera => camera.id === id);
     }
 
-    requestInverseRotation(obj: SceneObject): Matrix4x4 {
-        let newInverse = obj.props.inverseRotation
-        if (obj.props.updateInverseRotation || !newInverse) {
-            newInverse = M.mat4Inverse(M.mat4(), obj.rotation)
-            obj.props.inverseRotation = newInverse
-            obj.props.updateInverseRotation = false
+    requestInverseRotation(ent: Entity): Matrix4x4 {
+        let newInverse = ent.inverseRotation
+        if (ent.updateInverseRotation || !newInverse) {
+            newInverse = M.mat4Inverse(M.mat4(), ent.rotation)
+            ent.inverseRotation = newInverse
+            ent.updateInverseRotation = false
         }
         return newInverse
     }
@@ -81,31 +80,43 @@ export default class Model {
         let arr = this.chunks.get(key);
         if (!arr) { arr = []; this.chunks.set(key, arr); }
         if (!arr.includes(ent.id)) arr.push(ent.id);
-        if (!ent.props) ent.props = {} as any;
-        ent.props.chunkKey = key;
+        ent.chunkKey = key;
     }
 
     private removeFromChunk(ent: Entity, key?: string) {
-        const k = key ?? ent.props.chunkKey;
+        const k = key ?? ent.chunkKey;
         if (!k) return;
         const arr = this.chunks.get(k);
         if (!arr) return;
         const idx = arr.indexOf(ent.id);
         if (idx >= 0) arr.splice(idx, 1);
         if (arr.length === 0) this.chunks.delete(k);
-        delete ent.props.chunkKey;
+        delete ent.chunkKey;
+    }
+
+    getChunkKeys(center: { x: number, y: number, z: number }, dist: number) {
+        const keys = new Set<string>();
+        for (let dx = -dist; dx <= dist; dx++) {
+            for (let dy = -dist; dy <= dist; dy++) {
+                for (let dz = -dist; dz <= dist; dz++) {
+                    //if (dx * dx + dy * dy + dz * dz > dist * dist) continue;
+                    keys.add(`${center.x + dx},${center.y + dy},${center.z + dz}`);
+                }
+            }
+        }
+        return keys;
     }
 
     updateChunkAssignment(ent: Entity, oldChunkKey?: string) {
         const coords = this.chunkCoordsFromPosition(ent.position);
         const newKey = `${coords.x},${coords.y},${coords.z}`;
-        const prevKey = oldChunkKey ?? ent.props.chunkKey;
+        const prevKey = oldChunkKey ?? ent.chunkKey;
         if (prevKey !== newKey) {
             this.removeFromChunk(ent, prevKey);
             let arr = this.chunks.get(newKey);
             if (!arr) { arr = []; this.chunks.set(newKey, arr); }
             if (!arr.includes(ent.id)) arr.push(ent.id);
-            ent.props.chunkKey = newKey;
+            ent.chunkKey = newKey;
         }
     }
 
@@ -116,16 +127,6 @@ export default class Model {
         for (const cam of this.cameras) {
             cam.update(deltaMs);
         }
-    }
-
-    private entityToSceneObject(e: Entity): SceneObject {
-        return {
-            id: e.id,
-            position: e.position,
-            rotation: e.rotation,
-            scale: e.scale,
-            props: e.props || {}
-        };
     }
 
     addComponentToEntity(id: string, component: any) {
@@ -139,43 +140,29 @@ export default class Model {
         return this.entities.get(id);
     }
 
-    public getObjectsSeparated(cameraId: string = 'main-camera'): { static: SceneObject[], nonStatic: SceneObject[] } {
+    public getObjectsSeparated(cameraId: string = 'main-camera'): { static: Entity[], nonStatic: Entity[] } {
         const camera = this.getCamera(cameraId);
         if (!camera) return { static: [], nonStatic: [] };
         if (!o11s.CPU_CHUNKS) {
             // No chunking, return all objects
-            const staticObjects: SceneObject[] = [];
-            const nonStaticObjects: SceneObject[] = [];
+            const staticEntities: Entity[] = [];
+            const nonStaticEntities: Entity[] = [];
             this.entities.forEach(ent => {
-                const sceneObject = this.entityToSceneObject(ent);
-                if (ent.isStatic) staticObjects.push(sceneObject);
-                else nonStaticObjects.push(sceneObject);
+                if (ent.isStatic) staticEntities.push(ent);
+                else nonStaticEntities.push(ent);
             });
-            return { static: staticObjects, nonStatic: nonStaticObjects };
+            return { static: staticEntities, nonStatic: nonStaticEntities };
         }
 
         const camPos = camera.position;
         const camChunk = this.chunkCoordsFromPosition(camPos);
         const camChunkKey = `${camChunk.x},${camChunk.y},${camChunk.z}`;
 
-        let camRotInv: Matrix4x4 = M.mat4Inverse(M.mat4(), camera.rotation);
-
         // Cache chunk keys within render distance
         const renderDist = o11s.RENDER_DISTANCE;
 
         // Helper to get all chunk keys within render distance
-        function getChunkKeys(center: { x: number, y: number, z: number }, dist: number) {
-            const keys = new Set<string>();
-            for (let dx = -dist; dx <= dist; dx++) {
-                for (let dy = -dist; dy <= dist; dy++) {
-                    for (let dz = -dist; dz <= dist; dz++) {
-                        //if (dx * dx + dy * dy + dz * dz > dist * dist) continue;
-                        keys.add(`${center.x + dx},${center.y + dy},${center.z + dz}`);
-                    }
-                }
-            }
-            return keys;
-        }
+
 
         // Return cached objects if camera chunk did not change
         if (this.lastSceneObjectsCameraChunkKey === camChunkKey && !this.updateStatic) {
@@ -189,9 +176,9 @@ export default class Model {
         if (this.updateStatic || !this.lastSceneObjectsCameraChunkKey || Math.abs(camChunk.x - parseInt(this.lastSceneObjectsCameraChunkKey.split(',')[0])) > 2 || Math.abs(camChunk.y - parseInt(this.lastSceneObjectsCameraChunkKey.split(',')[1])) > 2 || Math.abs(camChunk.z - parseInt(this.lastSceneObjectsCameraChunkKey.split(',')[2])) > 2) {
             // Full recalc
             console.log("Full recalculation of chunks, entities:" + this.entities.size);
-            const staticObjects: SceneObject[] = [];
-            const nonStaticObjects: SceneObject[] = [];
-            const chunkKeys = getChunkKeys(camChunk, renderDist);
+            const staticEntites: Entity[] = [];
+            const nonStaticEntities: Entity[] = [];
+            const chunkKeys = this.getChunkKeys(camChunk, renderDist);
             chunkKeys.forEach(key => {
                 const ids = this.chunks.get(key);
                 if (ids) {
@@ -203,30 +190,29 @@ export default class Model {
                             const [kx, ky, kz] = key.split(',').map(Number);
                             const ddx = kx - camChunk.x, ddy = ky - camChunk.y, ddz = kz - camChunk.z;
                             if (Math.abs(ddx) > o11s.LOD_DISTANCE || Math.abs(ddy) > o11s.LOD_DISTANCE || Math.abs(ddz) > o11s.LOD_DISTANCE) {
-                                if (ent && mc) mc.LODReduce(ent);
+                                if (ent && mc) mc.LODReduce();
                             } else if (ent && mc) {
-                                mc.restoreMesh(ent);
+                                mc.restoreMesh();
                             }
                         }
                         if (ent) {
-                            const sceneObject = this.entityToSceneObject(ent);
-                            if (ent.isStatic) staticObjects.push(sceneObject);
-                            else nonStaticObjects.push(sceneObject);
+                            if (ent.isStatic) staticEntites.push(ent);
+                            else nonStaticEntities.push(ent);
                         }
                     });
                 }
             });
-            this.cachedVisibleSceneObjects = { static: staticObjects, nonStatic: nonStaticObjects };
+            this.cachedVisibleSceneObjects = { static: staticEntites, nonStatic: nonStaticEntities };
             this.lastSceneObjectsCameraChunkKey = camChunkKey;
-            return { static: staticObjects, nonStatic: nonStaticObjects };
+            return { static: staticEntites, nonStatic: nonStaticEntities };
         }
         console.log('updating chunks');
         // Otherwise, only update edge chunks
         const lastChunk = this.lastSceneObjectsCameraChunkKey.split(',').map(Number);
         //LOD 
         if (o11s.CPU_LOD) {
-            const newLod = getChunkKeys(camChunk, o11s.LOD_DISTANCE);
-            const oldLod = getChunkKeys({ x: lastChunk[0], y: lastChunk[1], z: lastChunk[2] }, o11s.LOD_DISTANCE);
+            const newLod = this.getChunkKeys(camChunk, o11s.LOD_DISTANCE);
+            const oldLod = this.getChunkKeys({ x: lastChunk[0], y: lastChunk[1], z: lastChunk[2] }, o11s.LOD_DISTANCE);
             const lodRestore = Array.from(newLod).filter((k: string) => !oldLod.has(k));
             const lodReduce = Array.from(oldLod).filter((k: string) => !newLod.has(k));
             lodRestore.forEach(key => {
@@ -236,7 +222,7 @@ export default class Model {
                         const ent = this.getEntityById(id);
                         if (ent) {
                             const mc = ent.getComponent(MeshComponent);
-                            if (mc) mc.restoreMesh(ent);
+                            if (mc) mc.restoreMesh();
                         }
                     });
                 }
@@ -248,7 +234,7 @@ export default class Model {
                         const ent = this.getEntityById(id);
                         if (ent) {
                             const mc = ent.getComponent(MeshComponent);
-                            if (mc) mc.LODReduce(ent);
+                            if (mc) mc.LODReduce();
                         }
                     });
                 }
@@ -256,21 +242,21 @@ export default class Model {
             console.log(`LOD: Restored ${lodRestore.length} chunks, Reduced ${lodReduce.length} chunks.`);
         }
         // Find new and old edge chunks
-        const prevKeys = getChunkKeys({ x: lastChunk[0], y: lastChunk[1], z: lastChunk[2] }, renderDist);
-        const newKeys = getChunkKeys(camChunk, renderDist);
+        const prevKeys = this.getChunkKeys({ x: lastChunk[0], y: lastChunk[1], z: lastChunk[2] }, renderDist);
+        const newKeys = this.getChunkKeys(camChunk, renderDist);
         // Chunks to add: in newKeys but not in prevKeys
         const addKeys = Array.from(newKeys).filter((k: string) => !prevKeys.has(k));
         // Chunks to remove: in prevKeys but not in newKeys
         const removeKeys = Array.from(prevKeys).filter((k: string) => !newKeys.has(k));
 
         // Remove objects from chunks now outside render distance
-        let staticObjects = this.cachedVisibleSceneObjects.static.filter(obj => {
-            return !obj.props.chunkKey || !removeKeys.includes(obj.props.chunkKey as string);
+        let staticEntities = this.cachedVisibleSceneObjects.static.filter(obj => {
+            return !obj.chunkKey || !removeKeys.includes(obj.chunkKey as string);
         });
-        let nonStaticObjects = this.cachedVisibleSceneObjects.nonStatic.filter(obj => {
-            return !obj.props.chunkKey || !removeKeys.includes(obj.props.chunkKey as string);
+        let nonStaticEntities = this.cachedVisibleSceneObjects.nonStatic.filter(obj => {
+            return !obj.chunkKey || !removeKeys.includes(obj.chunkKey as string);
         });
-        console.log(`Removed ${this.cachedVisibleSceneObjects.static.length - staticObjects.length} static and ${this.cachedVisibleSceneObjects.nonStatic.length - nonStaticObjects.length} non-static objects due to chunk removal.`);
+        console.log(`Removed ${this.cachedVisibleSceneObjects.static.length - staticEntities.length} static and ${this.cachedVisibleSceneObjects.nonStatic.length - nonStaticEntities.length} non-static objects due to chunk removal.`);
 
         addKeys.forEach(key => {
             const ids = this.chunks.get(key);
@@ -278,16 +264,15 @@ export default class Model {
                 ids.forEach(id => {
                     const ent = this.getEntityById(id);
                     if (ent) {
-                        const sceneObject = this.entityToSceneObject(ent);
-                        if (ent.isStatic) staticObjects.push(sceneObject);
-                        else nonStaticObjects.push(sceneObject);
+                        if (ent.isStatic) staticEntities.push(ent);
+                        else nonStaticEntities.push(ent);
                     }
                 });
             }
         });
 
-        this.cachedVisibleSceneObjects = { static: staticObjects, nonStatic: nonStaticObjects };
+        this.cachedVisibleSceneObjects = { static: staticEntities, nonStatic: nonStaticEntities };
         this.lastSceneObjectsCameraChunkKey = camChunkKey;
-        return { static: staticObjects.slice(), nonStatic: nonStaticObjects.slice() };
+        return { static: staticEntities.slice(), nonStatic: nonStaticEntities.slice() };
     }
 }

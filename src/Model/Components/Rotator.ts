@@ -9,9 +9,6 @@ export class Rotator implements Component {
         this.speed = speed;
         this.axis = axis;
     }
-    start(_entity: Entity) {
-        return
-    }
     update(entity: Entity, deltaMs?: number) {
         const seconds = (deltaMs ?? 16) / 1000;
         const rot = M.mat4Rotation(this.axis.x * this.speed * seconds, this.axis.y * this.speed * seconds, this.axis.z * this.speed * seconds);
