@@ -28,8 +28,10 @@ export class WebGLView extends BaseView {
         objectMatrix?: WebGLUniformLocation | null;
         cameraMatrix?: WebGLUniformLocation | null;
         projectionMatrix?: WebGLUniformLocation | null;
+        u_texture?: WebGLUniformLocation | null;
     } = {};
     private glVertexArray?: WebGLVertexArrayObject;
+    private glTextures = new Map<string, WebGLTexture>();
 
     /**
      * Initialize WebGL 2.0 context and set up rendering pipeline.
@@ -66,6 +68,7 @@ export class WebGLView extends BaseView {
             this.glUniforms.objectMatrix = gl.getUniformLocation(this.glProgram, 'objectMatrix');
             this.glUniforms.cameraMatrix = gl.getUniformLocation(this.glProgram, 'cameraMatrix');
             this.glUniforms.projectionMatrix = gl.getUniformLocation(this.glProgram, 'projectionMatrix');
+            this.glUniforms.u_texture = gl.getUniformLocation(this.glProgram, 'u_texture');
 
             // Create vertex array object
             this.glVertexArray = gl.createVertexArray();
@@ -107,6 +110,9 @@ export class WebGLView extends BaseView {
             window.addEventListener('resize', resizeCanvas);
             resizeCanvas();
 
+            // Initialize default primitive texture
+            this.initializePrimitiveTexture();
+
             console.log('WebGL initialized successfully');
 
         } catch (error) {
@@ -141,8 +147,8 @@ export class WebGLView extends BaseView {
         }
     }
 
-    public uploadMeshToGPU(meshId: string, vertices: Float32Array, normals: Float32Array, indices: Uint32Array | Uint16Array): void {
-        this.meshes[meshId] = { id: meshId, vertices, normals, indices };
+    public uploadMeshToGPU(meshId: string, vertices: Float32Array, normals: Float32Array, uvs: Float32Array, indices: Uint32Array | Uint16Array): void {
+        this.meshes[meshId] = { id: meshId, vertices, normals, uvs, indices };
         if (this.gl) this.createWebGLBuffersForMesh(meshId);
     }
 
@@ -176,54 +182,80 @@ export class WebGLView extends BaseView {
 
             gl.bindVertexArray(this.glVertexArray);
 
-            // Render objects grouped by mesh, but update object matrix per object
-            let currentMeshId = "empty";
-            let objIndex = 0;
-            let buf;
-
+            // Group objects by mesh+texture combinations for efficient batching
+            const batches = new Map<string, Array<Entity>>();
+            
             // Use separated objects if available, otherwise fall back to combined sceneObjects
             const allObjects = this.staticSceneObjects.length > 0 || this.nonStaticSceneObjects.length > 0
                 ? [...this.staticSceneObjects, ...this.nonStaticSceneObjects]
                 : this.sceneObjects;
 
+            // Group objects by mesh+texture
             for (const obj of allObjects) {
-                objIndex++;
-                if (!obj.getComponent(MeshComponent)) continue;
-
-                // Switch mesh if needed
-                if (obj.getComponent(MeshComponent)?.mesh.id !== currentMeshId) {
-                    currentMeshId = obj.getComponent(MeshComponent)?.mesh.id!;
-                    buf = this.glVertexBuffers.get(currentMeshId);
-                    if (!buf) continue;
-
-                    // Bind vertex buffer
-                    gl.bindBuffer(gl.ARRAY_BUFFER, buf.vertexBuffer);
-                    
-                    // Set up position attribute (location 0)
-                    gl.enableVertexAttribArray(0);
-                    gl.vertexAttribPointer(0, 3, gl.FLOAT, false, 24, 0); // stride=24 (6 floats), offset=0
-                    
-                    // Set up normal attribute (location 1)
-                    gl.enableVertexAttribArray(1);
-                    gl.vertexAttribPointer(1, 3, gl.FLOAT, false, 24, 12); // stride=24, offset=12 (after 3 position floats)
-
-                    // Bind index buffer
-                    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, buf.indexBuffer);
-                }
+                const meshComponent = obj.getComponent(MeshComponent);
+                if (!meshComponent) continue;
                 
+                const batchKey = `${meshComponent.mesh.id}-${meshComponent.texture}`;
+                if (!batches.has(batchKey)) {
+                    batches.set(batchKey, []);
+                }
+                batches.get(batchKey)!.push(obj);
+            }
+
+            let objIndex = 0;
+            
+            // Render each batch
+            for (const [, objects] of batches) {
+                const firstObj = objects[0];
+                const meshComponent = firstObj.getComponent(MeshComponent)!;
+                const meshId = meshComponent.mesh.id;
+                const textureId = meshComponent.texture;
+                
+                const buf = this.glVertexBuffers.get(meshId);
                 if (!buf) continue;
 
-                // Set object matrix for this specific object
-                if (this.glUniforms.objectMatrix) {
-                    const translation = [obj.position[0], obj.position[1], obj.position[2]];
-                    const scale = [obj.scale[0], obj.scale[1], obj.scale[2]];
-                    const matrix = M.mat4Transpose(M.mat4TRS(translation, obj.rotation, scale));
-                    gl.uniformMatrix4fv(this.glUniforms.objectMatrix, false, matrix);
-                }
+                // Bind mesh buffers
+                gl.bindBuffer(gl.ARRAY_BUFFER, buf.vertexBuffer);
+                
+                // Set up position attribute (location 0)
+                gl.enableVertexAttribArray(0);
+                gl.vertexAttribPointer(0, 3, gl.FLOAT, false, 32, 0); // stride=32 (8 floats), offset=0
+                
+                // Set up normal attribute (location 1)
+                gl.enableVertexAttribArray(1);
+                gl.vertexAttribPointer(1, 3, gl.FLOAT, false, 32, 12); // stride=32, offset=12 (after 3 position floats)
+                
+                // Set up UV attribute (location 2)
+                gl.enableVertexAttribArray(2);
+                gl.vertexAttribPointer(2, 2, gl.FLOAT, false, 32, 24); // stride=32, offset=24 (after position + normal)
 
-                // Draw this object
-                const indexType = (buf.indices instanceof Uint16Array) ? gl.UNSIGNED_SHORT : gl.UNSIGNED_INT;
-                gl.drawElements(gl.TRIANGLES, buf.indices.length, indexType, 0);
+                // Bind index buffer
+                gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, buf.indexBuffer);
+
+                // Bind texture
+                const texture = this.glTextures.get(textureId);
+                if (texture && this.glUniforms.u_texture) {
+                    gl.activeTexture(gl.TEXTURE0);
+                    gl.bindTexture(gl.TEXTURE_2D, texture);
+                    gl.uniform1i(this.glUniforms.u_texture, 0);
+                }
+                
+                // Render all objects in this batch
+                for (const obj of objects) {
+                    objIndex++;
+                    
+                    // Set object matrix for this specific object
+                    if (this.glUniforms.objectMatrix) {
+                        const translation = [obj.position[0], obj.position[1], obj.position[2]];
+                        const scale = [obj.scale[0], obj.scale[1], obj.scale[2]];
+                        const matrix = M.mat4Transpose(M.mat4TRS(translation, obj.rotation, scale));
+                        gl.uniformMatrix4fv(this.glUniforms.objectMatrix, false, matrix);
+                    }
+
+                    // Draw this object
+                    const indexType = (buf.indices instanceof Uint16Array) ? gl.UNSIGNED_SHORT : gl.UNSIGNED_INT;
+                    gl.drawElements(gl.TRIANGLES, buf.indices.length, indexType, 0);
+                }
             }
         } catch (e) {
             console.error('WebGL render error:', e);
@@ -272,15 +304,17 @@ export class WebGLView extends BaseView {
         const gl = this.gl;
         const vertices = mesh.vertices;
         const normals = mesh.normals;
+        const uvs = mesh.uvs;
         const indices = mesh.indices;
 
-        // Interleave vertices and normals: [x, y, z, nx, ny, nz, x, y, z, nx, ny, nz, ...]
+        // Interleave vertices, normals, and UVs: [x, y, z, nx, ny, nz, u, v, x, y, z, nx, ny, nz, u, v, ...]
         const vertexCount = vertices.length / 3;
-        const interleavedData = new Float32Array(vertexCount * 6); // 3 for position + 3 for normal
+        const interleavedData = new Float32Array(vertexCount * 8); // 3 for position + 3 for normal + 2 for UV
         
         for (let i = 0; i < vertexCount; i++) {
-            const baseIdx = i * 6;
+            const baseIdx = i * 8;
             const vertIdx = i * 3;
+            const uvIdx = i * 2;
             
             // Copy position
             interleavedData[baseIdx + 0] = vertices[vertIdx + 0];
@@ -291,6 +325,10 @@ export class WebGLView extends BaseView {
             interleavedData[baseIdx + 3] = normals[vertIdx + 0];
             interleavedData[baseIdx + 4] = normals[vertIdx + 1];
             interleavedData[baseIdx + 5] = normals[vertIdx + 2];
+            
+            // Copy UV
+            interleavedData[baseIdx + 6] = uvs[uvIdx + 0];
+            interleavedData[baseIdx + 7] = uvs[uvIdx + 1];
         }
 
         // Create vertex buffer with interleaved data
@@ -308,5 +346,42 @@ export class WebGLView extends BaseView {
         gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, indices, gl.STATIC_DRAW);
 
         this.glVertexBuffers.set(meshId, { vertexBuffer, indexBuffer, indices });
+    }
+
+    /**
+     * Create a texture from raw RGBA data
+     */
+    private createTexture(textureId: string, width: number, height: number, data: Uint8Array): void {
+        if (!this.gl) return;
+        if (this.glTextures.has(textureId)) return;
+
+        const gl = this.gl;
+        const texture = gl.createTexture();
+        if (!texture) return;
+
+        gl.bindTexture(gl.TEXTURE_2D, texture);
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, width, height, 0, gl.RGBA, gl.UNSIGNED_BYTE, data);
+        
+        // Set texture parameters for pixel art/nearest neighbor filtering
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.REPEAT);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.REPEAT);
+
+        this.glTextures.set(textureId, texture);
+    }
+
+    /**
+     * Initialize default primitive texture
+     */
+    private initializePrimitiveTexture(): void {
+        // Create a simple 2x2 checkerboard texture
+        const textureData = new Uint8Array([
+            // Top row: white, red
+            255, 255, 255, 255,   255, 0, 0, 255,
+            // Bottom row: green, blue  
+            0, 255, 0, 255,       0, 0, 255, 255
+        ]);
+        this.createTexture('primitive', 2, 2, textureData);
     }
 }

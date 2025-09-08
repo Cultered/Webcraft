@@ -229,8 +229,8 @@ export class WebGPUView extends BaseView {
         }
     }
 
-    public uploadMeshToGPU(meshId: string, vertices: Float32Array, normals: Float32Array, indices: Uint32Array | Uint16Array): void {
-        this.meshes[meshId] = { id: meshId, vertices, normals, indices };
+    public uploadMeshToGPU(meshId: string, vertices: Float32Array, normals: Float32Array, uvs: Float32Array, indices: Uint32Array | Uint16Array): void {
+        this.meshes[meshId] = { id: meshId, vertices, normals, uvs, indices };
         if (this.device) this.createBuffersForMesh(meshId);
     }
 
