@@ -1,6 +1,7 @@
 class Debug {
     public dlog: string[] = [];
     public dlogElement: HTMLDivElement;
+    private dlogTextElement!: HTMLPreElement;
     public plog: Record<string, number[]> = {};
     private callCounts: Record<string, { count: number, lastTime: number, cps: number }> = {};
     public plogElement: HTMLDivElement;
@@ -26,6 +27,23 @@ class Debug {
         el.style.fontFamily = 'monospace';
         el.style.zIndex = '9999';
         el.innerText = 'Profiler';
+        // Add close button
+        const closeBtn = document.createElement('button');
+        closeBtn.innerText = '✖';
+        closeBtn.title = 'Close Profiler';
+        closeBtn.style.position = 'absolute';
+        closeBtn.style.top = '2px';
+        closeBtn.style.right = '2px';
+        closeBtn.style.background = '#222';
+        closeBtn.style.color = 'white';
+        closeBtn.style.border = 'none';
+        closeBtn.style.cursor = 'pointer';
+        closeBtn.style.fontSize = '14px';
+        closeBtn.style.padding = '2px 6px';
+        closeBtn.onclick = () => {
+            el.remove();
+        };
+        el.appendChild(closeBtn);
         document.body.appendChild(el);
         return el;
     }
@@ -38,14 +56,16 @@ class Debug {
         canvas.style.marginTop = '8px';
         return canvas;
     }
-    
+
     public log(str: string): void {
         this.dlog.push(str)
     }
 
     public flush(): void {
-        this.dlogElement.innerText = this.dlog.join('\n');
-        this.dlog = []
+        if (this.dlogTextElement) {
+            this.dlogTextElement.innerText = this.dlog.join('\n');
+        }
+        this.dlog = [];
     }
 
     public perf<T>(name: string, cb: () => T): T {
@@ -149,7 +169,35 @@ class Debug {
         debugEl.style.padding = '8px';
         debugEl.style.fontFamily = 'monospace';
         debugEl.style.zIndex = '9999';
-        debugEl.innerText = 'Initializing...';
+        debugEl.style.minWidth = '200px';
+        debugEl.style.minHeight = '40px';
+
+        // Add close button
+        const closeBtn = document.createElement('button');
+        closeBtn.innerText = '✖';
+        closeBtn.title = 'Close Logger';
+        closeBtn.style.position = 'absolute';
+        closeBtn.style.top = '2px';
+        closeBtn.style.right = '2px';
+        closeBtn.style.background = '#222';
+        closeBtn.style.color = 'white';
+        closeBtn.style.border = 'none';
+        closeBtn.style.cursor = 'pointer';
+        closeBtn.style.fontSize = '14px';
+        closeBtn.style.padding = '2px 6px';
+        closeBtn.onclick = () => {
+            debugEl.remove();
+        };
+        debugEl.appendChild(closeBtn);
+
+        // Add log text element
+        const logText = document.createElement('pre');
+        logText.style.margin = '0';
+        logText.style.whiteSpace = 'pre-wrap';
+        logText.innerText = 'Initializing...';
+        debugEl.appendChild(logText);
+        this.dlogTextElement = logText;
+
         document.body.appendChild(debugEl);
         return debugEl;
     }
