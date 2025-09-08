@@ -48,7 +48,7 @@ export default class Controller {
 
   private renderLoop = () => {
     const separatedObjects = debug.perf('model-objects', () => this.model.getObjectsSeparated());
-    console.log(`Rendering ${separatedObjects.static.length} static and ${separatedObjects.nonStatic.length} non-static objects.`); 
+    debug.log(`Rendering ${separatedObjects.static.length} static and ${separatedObjects.nonStatic.length} non-static objects.`); 
     debug.perf('view-register', () =>
       this.view.registerSceneObjectsSeparated(
         separatedObjects.static,

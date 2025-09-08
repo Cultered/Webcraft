@@ -41,13 +41,15 @@ export class WebGPUView extends BaseView {
     private depthTexture?: GPUTexture;
     private renderPipeline?: GPURenderPipeline;
     private objectBuffers = new Map<string, { vertexBuffer: GPUBuffer; indexBuffer: GPUBuffer; indices: Uint32Array | Uint16Array }>();
-    private staticMeshBatches = new Map<string, { base: number; count: number }>();
-    private nonStaticMeshBatches = new Map<string, { base: number; count: number }>();
+    private staticMeshBatches = new Map<string, { base: number; count: number; meshId: string; textureId: string }>();
+    private nonStaticMeshBatches = new Map<string, { base: number; count: number; meshId: string; textureId: string }>();
     private nonStaticBaseOffset = 0;
     private bindGroup?: GPUBindGroup;
     private objectStorageBuffer?: GPUBuffer;
     private cameraBuffer?: GPUBuffer;
     private projectionBuffer?: GPUBuffer;
+    private textureSampler?: GPUSampler;
+    private primitiveTexture?: GPUTexture;
 
     // Added MSAA fields
     private msaaColorTexture?: GPUTexture;
@@ -118,11 +120,22 @@ export class WebGPUView extends BaseView {
                 const initialProj = M.mat4Projection(this.fov, (canvas.width || window.innerWidth) / (canvas.height || window.innerHeight), this.near, this.far);
                 this.device.queue.writeBuffer(this.projectionBuffer, 0, M.mat4Transpose(initialProj).buffer);
 
+                // Create primitive texture and sampler
+                this.createPrimitiveTexture();
+                this.textureSampler = device.createSampler({
+                    addressModeU: 'repeat',
+                    addressModeV: 'repeat',
+                    magFilter: 'nearest',
+                    minFilter: 'nearest',
+                });
+
                 const bindGroupLayout = device.createBindGroupLayout({
                     entries: [
                         { binding: 0, visibility: GPUShaderStage.VERTEX, buffer: { type: 'read-only-storage' } },
                         { binding: 1, visibility: GPUShaderStage.VERTEX, buffer: { type: 'uniform' } },
                         { binding: 2, visibility: GPUShaderStage.VERTEX, buffer: { type: 'uniform' } },
+                        { binding: 3, visibility: GPUShaderStage.FRAGMENT, sampler: {} },
+                        { binding: 4, visibility: GPUShaderStage.FRAGMENT, texture: { sampleType: 'float' } },
                     ],
                 });
                 this.bindGroup = device.createBindGroup({
@@ -130,6 +143,8 @@ export class WebGPUView extends BaseView {
                         { binding: 0, resource: { buffer: this.objectStorageBuffer! } },
                         { binding: 1, resource: { buffer: this.cameraBuffer! } },
                         { binding: 2, resource: { buffer: this.projectionBuffer! } },
+                        { binding: 3, resource: this.textureSampler! },
+                        { binding: 4, resource: this.primitiveTexture!.createView() },
                     ]
                 });
 
@@ -137,9 +152,10 @@ export class WebGPUView extends BaseView {
                     { 
                         attributes: [
                             { shaderLocation: 0, offset: 0, format: 'float32x3' },  // position
-                            { shaderLocation: 1, offset: 12, format: 'float32x3' }  // normal (12 bytes after position)
+                            { shaderLocation: 1, offset: 12, format: 'float32x3' }, // normal (12 bytes after position)
+                            { shaderLocation: 2, offset: 24, format: 'float32x2' }  // uv (24 bytes after position + normal)
                         ], 
-                        arrayStride: 24,  // 6 floats * 4 bytes = 24 bytes per vertex (position + normal)
+                        arrayStride: 32,  // 8 floats * 4 bytes = 32 bytes per vertex (position + normal + uv)
                         stepMode: 'vertex' 
                     }
                 ];
@@ -229,8 +245,8 @@ export class WebGPUView extends BaseView {
         }
     }
 
-    public uploadMeshToGPU(meshId: string, vertices: Float32Array, normals: Float32Array, indices: Uint32Array | Uint16Array): void {
-        this.meshes[meshId] = { id: meshId, vertices, normals, indices };
+    public uploadMeshToGPU(meshId: string, vertices: Float32Array, normals: Float32Array, uvs: Float32Array, indices: Uint32Array | Uint16Array): void {
+        this.meshes[meshId] = { id: meshId, vertices, normals, uvs, indices };
         if (this.device) this.createBuffersForMesh(meshId);
     }
 
@@ -265,13 +281,13 @@ export class WebGPUView extends BaseView {
             const passEncoder = commandEncoder.beginRenderPass(renderPassDescriptor);
             passEncoder.setPipeline(this.renderPipeline);
 
-            // Optimized rendering: draw static objects first, then non-static objects, grouped by mesh
+            // Optimized rendering: draw static objects first, then non-static objects, grouped by mesh+texture
             passEncoder.setBindGroup(0, this.bindGroup!);
             let objIndex = 0;
-            
-            // First, draw all static objects grouped by mesh
-            for (const [meshId, batch] of this.staticMeshBatches) {
-                const buf = this.objectBuffers.get(meshId);
+            // First, draw all static objects grouped by mesh+texture
+            for (const [_, batch] of this.staticMeshBatches) {
+                const buf = this.objectBuffers.get(batch.meshId);
+                debug.log(buf ? "" : "No buffer for mesh " + batch.meshId);
                 if (!buf) continue;
                 passEncoder.setVertexBuffer(0, buf.vertexBuffer);
                 const indexFormat: GPUIndexFormat = buf.indices instanceof Uint16Array ? 'uint16' : 'uint32';
@@ -280,9 +296,9 @@ export class WebGPUView extends BaseView {
                 objIndex += batch.count;
             }
             
-            // Then, draw all non-static objects grouped by mesh
-            for (const [meshId, batch] of this.nonStaticMeshBatches) {
-                const buf = this.objectBuffers.get(meshId);
+            // Then, draw all non-static objects grouped by mesh+texture
+            for (const [_, batch] of this.nonStaticMeshBatches) {
+                const buf = this.objectBuffers.get(batch.meshId);
                 if (!buf) continue;
                 passEncoder.setVertexBuffer(0, buf.vertexBuffer);
                 const indexFormat: GPUIndexFormat = buf.indices instanceof Uint16Array ? 'uint16' : 'uint32';
@@ -290,6 +306,7 @@ export class WebGPUView extends BaseView {
                 passEncoder.drawIndexed(buf.indices.length, batch.count, 0, 0, batch.base);
                 objIndex += batch.count;
             }
+            debug.log(`Drawn ${objIndex} objects in total.`);
 
             passEncoder.end();
             this.device.queue.submit([commandEncoder.finish()]);
@@ -307,15 +324,17 @@ export class WebGPUView extends BaseView {
         
         const vertices = mesh.vertices;
         const normals = mesh.normals;
+        const uvs = mesh.uvs;
         const indices = mesh.indices;
         
-        // Interleave vertices and normals: [x, y, z, nx, ny, nz, x, y, z, nx, ny, nz, ...]
+        // Interleave vertices, normals, and UVs: [x, y, z, nx, ny, nz, u, v, x, y, z, nx, ny, nz, u, v, ...]
         const vertexCount = vertices.length / 3;
-        const interleavedData = new Float32Array(vertexCount * 6); // 3 for position + 3 for normal
+        const interleavedData = new Float32Array(vertexCount * 8); // 3 for position + 3 for normal + 2 for UV
         
         for (let i = 0; i < vertexCount; i++) {
-            const baseIdx = i * 6;
+            const baseIdx = i * 8;
             const vertIdx = i * 3;
+            const uvIdx = i * 2;
             
             // Copy position
             interleavedData[baseIdx + 0] = vertices[vertIdx + 0];
@@ -326,6 +345,10 @@ export class WebGPUView extends BaseView {
             interleavedData[baseIdx + 3] = normals[vertIdx + 0];
             interleavedData[baseIdx + 4] = normals[vertIdx + 1];
             interleavedData[baseIdx + 5] = normals[vertIdx + 2];
+            
+            // Copy UV
+            interleavedData[baseIdx + 6] = uvs[uvIdx + 0];
+            interleavedData[baseIdx + 7] = uvs[uvIdx + 1];
         }
         
         const vertexBuffer = this.device.createBuffer({ 
@@ -366,6 +389,8 @@ export class WebGPUView extends BaseView {
                 { binding: 0, resource: { buffer: this.objectStorageBuffer! } },
                 { binding: 1, resource: { buffer: this.cameraBuffer! } },
                 { binding: 2, resource: { buffer: this.projectionBuffer! } },
+                { binding: 3, resource: this.textureSampler! },
+                { binding: 4, resource: this.primitiveTexture!.createView() },
             ] });
         }
     }
@@ -384,6 +409,8 @@ export class WebGPUView extends BaseView {
                 { binding: 0, resource: { buffer: this.objectStorageBuffer! } },
                 { binding: 1, resource: { buffer: this.cameraBuffer! } },
                 { binding: 2, resource: { buffer: this.projectionBuffer! } },
+                { binding: 3, resource: this.textureSampler! },
+                { binding: 4, resource: this.primitiveTexture!.createView() },
             ] });
             this.device.queue.writeBuffer(this.objectStorageBuffer!, 0, all.buffer, 0, all.byteLength);
             return;
@@ -401,18 +428,22 @@ export class WebGPUView extends BaseView {
     }
 
     private buildBatchesAndMatrixBuffer(staticObjs: Entity[], nonStaticObjs: Entity[]) {
-        // Group objects by mesh, keeping static and non-static separate
+        // Group objects by mesh+texture, keeping static and non-static separate
         const staticGroups = new Map<string, Entity[]>();
         const nonStaticGroups = new Map<string, Entity[]>();
         
         const pushStatic = (o: Entity) => {
-            const id = o.getComponent(MeshComponent)?.mesh.id!;
+            const meshComponent = o.getComponent(MeshComponent);
+            if (!meshComponent) return;
+            const id = `${meshComponent.mesh.id}-${meshComponent.texture}`;
             if (!staticGroups.has(id)) staticGroups.set(id, []);
             staticGroups.get(id)!.push(o);
         };
         
         const pushNonStatic = (o: Entity) => {
-            const id = o.getComponent(MeshComponent)?.mesh.id!;
+            const meshComponent = o.getComponent(MeshComponent);
+            if (!meshComponent) return;
+            const id = `${meshComponent.mesh.id}-${meshComponent.texture}`;
             if (!nonStaticGroups.has(id)) nonStaticGroups.set(id, []);
             nonStaticGroups.get(id)!.push(o);
         };
@@ -427,10 +458,11 @@ export class WebGPUView extends BaseView {
         
         let cursor = 0;
         
-        // First, add all static objects grouped by mesh
-        for (const [meshId, arr] of staticGroups) {
-            const batch = { base: cursor, count: arr.length };
-            this.staticMeshBatches.set(meshId, batch);
+        // First, add all static objects grouped by mesh+texture
+        for (const [meshTextureId, arr] of staticGroups) {
+            const firstMC = arr[0].getComponent(MeshComponent)!;
+            const batch = { base: cursor, count: arr.length, meshId: firstMC.mesh.id, textureId: firstMC.texture };
+            this.staticMeshBatches.set(meshTextureId, batch);
             
             for (let i = 0; i < arr.length; i++) {
                 const o = arr[i];
@@ -442,11 +474,12 @@ export class WebGPUView extends BaseView {
             cursor += arr.length;
         }
         
-        // Then, add all non-static objects grouped by mesh
+        // Then, add all non-static objects grouped by mesh+texture
         this.nonStaticBaseOffset = cursor;
-        for (const [meshId, arr] of nonStaticGroups) {
-            const batch = { base: cursor, count: arr.length };
-            this.nonStaticMeshBatches.set(meshId, batch);
+        for (const [meshTextureId, arr] of nonStaticGroups) {
+            const firstMC = arr[0].getComponent(MeshComponent)!;
+            const batch = { base: cursor, count: arr.length, meshId: firstMC.mesh.id, textureId: firstMC.texture };
+            this.nonStaticMeshBatches.set(meshTextureId, batch);
             
             for (let i = 0; i < arr.length; i++) {
                 const o = arr[i];
@@ -463,11 +496,13 @@ export class WebGPUView extends BaseView {
     }
 
     private buildNonStaticMatrixBuffer(nonStaticObjs: Entity[]): Float32Array {
-        // Group non-static objects by mesh
+        // Group non-static objects by mesh+texture
         const nonStaticGroups = new Map<string, Entity[]>();
         
         const pushNonStatic = (o: Entity) => {
-            const id = o.getComponent(MeshComponent)?.mesh.id!;
+            const meshComponent = o.getComponent(MeshComponent);
+            if (!meshComponent) return;
+            const id = `${meshComponent.mesh.id}-${meshComponent.texture}`;
             if (!nonStaticGroups.has(id)) nonStaticGroups.set(id, []);
             nonStaticGroups.get(id)!.push(o);
         };
@@ -493,11 +528,13 @@ export class WebGPUView extends BaseView {
     }
 
     private updateNonStaticBatches(nonStaticObjs: Entity[]): void {
-        // Group non-static objects by mesh and update batch information
+        // Group non-static objects by mesh+texture and update batch information
         const nonStaticGroups = new Map<string, Entity[]>();
         
         const pushNonStatic = (o: Entity) => {
-            const id = o.getComponent(MeshComponent)?.mesh.id!;
+            const meshComponent = o.getComponent(MeshComponent);
+            if (!meshComponent) return;
+            const id = `${meshComponent.mesh.id}-${meshComponent.texture}`;
             if (!nonStaticGroups.has(id)) nonStaticGroups.set(id, []);
             nonStaticGroups.get(id)!.push(o);
         };
@@ -507,10 +544,39 @@ export class WebGPUView extends BaseView {
         this.nonStaticMeshBatches.clear();
         let cursor = this.nonStaticBaseOffset;
         
-        for (const [meshId, arr] of nonStaticGroups) {
-            this.nonStaticMeshBatches.set(meshId, { base: cursor, count: arr.length });
+        for (const [meshTextureId, arr] of nonStaticGroups) {
+            const firstMC = arr[0].getComponent(MeshComponent)!;
+            this.nonStaticMeshBatches.set(meshTextureId, { base: cursor, count: arr.length, meshId: firstMC.mesh.id, textureId: firstMC.texture });
             cursor += arr.length;
         }
         
+    }
+
+    /**
+     * Create primitive texture for testing
+     */
+    private createPrimitiveTexture(): void {
+        if (!this.device) return;
+
+        // Create a simple 2x2 texture
+        const textureData = new Uint8Array([
+            // Top row: white, red
+            255, 255, 255, 255,   255, 0, 0, 255,
+            // Bottom row: green, blue  
+            0, 255, 0, 255,       0, 0, 255, 255
+        ]);
+
+        this.primitiveTexture = this.device.createTexture({
+            size: { width: 2, height: 2 },
+            format: 'rgba8unorm',
+            usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST,
+        });
+
+        this.device.queue.writeTexture(
+            { texture: this.primitiveTexture },
+            textureData,
+            { bytesPerRow: 8, rowsPerImage: 2 },
+            { width: 2, height: 2 }
+        );
     }
 }

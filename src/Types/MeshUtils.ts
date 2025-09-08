@@ -19,7 +19,15 @@ export const LOD_MESH: Mesh = {
             0, 0, 1,
             0, 0, -1]
         ),
-
+        // Basic UV coordinates for octahedron
+        uvs: new Float32Array(
+            [1, 0.5,
+            0, 0.5,
+            0.5, 1,
+            0.5, 0,
+            0.75, 0.75,
+            0.25, 0.25]
+        ),
         // Initial faces (triangles) of the octahedron
         indices: new Uint32Array([
             4, 0, 2, 4, 2, 1, 4, 1, 3, 4, 3, 0,
@@ -83,11 +91,17 @@ export function generateSphereMesh(subdivisions: number, radius: number) {
     // Flatten vertices and scale to requested radius
     const outVerts: number[] = [];
     const outNormals: number[] = [];
-    for (const v of verts) {
-        const n = normalize(v);
+    const outUVs: number[] = [];
+    for (const vert of verts) {
+        const n = normalize(vert);
         outVerts.push(n[0] * radius, n[1] * radius, n[2] * radius);
         // For spheres, normals are the same as normalized vertex positions
         outNormals.push(n[0], n[1], n[2]);
+        
+        // Generate UV coordinates using spherical mapping
+        const u = 0.5 + Math.atan2(n[2], n[0]) / (2 * Math.PI);
+        const v = 0.5 - Math.asin(n[1]) / Math.PI;
+        outUVs.push(u, v);
     }
 
     // Build indices
@@ -102,6 +116,7 @@ export function generateSphereMesh(subdivisions: number, radius: number) {
     return {
         vertices: new Float32Array(outVerts),
         normals: new Float32Array(outNormals),
+        uvs: new Float32Array(outUVs),
         indices: indexArray,
     };
 }
@@ -140,6 +155,22 @@ export function generateCubeMesh(size: number) {
         -1, 0, 0, -1, 0, 0, -1, 0, 0, -1, 0, 0
     ];
 
+    // UV coordinates - each face maps to full texture
+    const uvs = [
+        // Front face
+        0, 0,  1, 0,  1, 1,  0, 1,
+        // Back face
+        1, 0,  1, 1,  0, 1,  0, 0,
+        // Top face
+        0, 1,  0, 0,  1, 0,  1, 1,
+        // Bottom face
+        1, 1,  0, 1,  0, 0,  1, 0,
+        // Right face
+        1, 0,  1, 1,  0, 1,  0, 0,
+        // Left face
+        0, 0,  1, 0,  1, 1,  0, 1
+    ];
+
     const indices = [
         0,  1,  2,   0,  2,  3,    // Front face
         4,  5,  6,   4,  6,  7,    // Back face
@@ -152,6 +183,7 @@ export function generateCubeMesh(size: number) {
     return {
         vertices: new Float32Array(vertices),
         normals: new Float32Array(normals),
+        uvs: new Float32Array(uvs),
         indices: new Uint16Array(indices),
     };
 }
