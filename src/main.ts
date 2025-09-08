@@ -86,12 +86,19 @@ import Rotator from './Model/Components/Rotator';
     const tubePoints = torusTube(R, r, p, q, Nu, Nv);
     tubePoints.forEach(([x, y, z], idx) => {
         const id = `torusTubeSphere-${idx}`;
-        const ent = new Entity(id, V.vec4(x, y, z), undefined, V.vec4(1, 1, 1, 1));
+        const ent = new Entity(id, V.vec4(x, y, z), undefined, V.vec4(1, 1, 1, 1), true);
         ent.addComponent(sphereComponent);
-        model.addExistingEntity(ent);
+        model.addEntity(ent);
     });
 
-    model.addComponentToEntity('obj-0-0-1', new Rotator(1.0, { x: 1, y: 0, z: -1 }));
+    
+    // Add a rotating cube in the center
+    const cubeEntity = new Entity('rotating-cube', V.vec4(0, 0, 0), undefined, V.vec4(10, 10, 10, 1), false);
+    const cubeComponent = new MeshComponent(cubeMesh, true);
+    cubeEntity.addComponent(cubeComponent);
+    const rotator = new Rotator(1,{x:0,y:1,z:0});
+    cubeEntity.addComponent(rotator);
+    model.addEntity(cubeEntity);
 
 
 

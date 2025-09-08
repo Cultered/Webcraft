@@ -7,8 +7,8 @@ export class MeshComponent implements Component {
     useLOD: boolean
     constructor(mesh: Mesh, useLOD: boolean) { this.mesh = mesh; this.useLOD = useLOD; }
 
-    start() {
-        this.isLOD = false;
+    start() : Mesh {
+        return this.mesh;
     }
     restoreMesh() {
         if (this.isLOD) { this.isLOD = false; }

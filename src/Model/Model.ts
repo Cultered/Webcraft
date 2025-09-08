@@ -9,8 +9,10 @@ import { o11s } from '../config/config';
 
 
 export default class Model {
-    private entities: Map<string, Entity> = new Map();
-    public updateStatic: boolean = true;
+    // Unified entities map removed. We now explicitly track static vs non-static sets.
+    private staticEntities:  Map<string, Entity> = new Map();
+    private nonStaticEntities:  Map<string, Entity> = new Map();
+    public fullUpdate: boolean = true;
     private cameras: Entity[] = [];
     private chunks: Map<string, string[]> = new Map();
     private cachedVisibleSceneObjects: { static: Entity[], nonStatic: Entity[] } = { static: [], nonStatic: [] };
@@ -19,30 +21,15 @@ export default class Model {
     constructor() {
     }
 
-    addEntity(id: string, opts: {
-        position?: Vector4,
-        rotation?: Matrix4x4,
-        scale?: Vector4,
-        components?: any[]
-    } = {}) {
-        const ent = new Entity(id, opts.position, opts.rotation, opts.scale);
-        if (opts.components) {
-            for (const c of opts.components) ent.addComponent(c);
-        }
-        this.entities.set(ent.id, ent);
-        this.assignToChunk(ent);
-        this.updateStatic = true;
-        return ent;
-    }
-
-    addExistingEntity(ent: Entity) {
-        if (this.getEntityById(ent.id)) {
+    addEntity(ent: Entity) {
+        const existing = this.getEntityById(ent.id);
+        if (existing) {
             console.warn(`Entity with id ${ent.id} already exists in Model. Skipping add.`);
-            return this.getEntityById(ent.id);
+            return existing;
         }
-        this.entities.set(ent.id, ent);
+        if (ent.isStatic) this.staticEntities.set(ent.id, ent); else this.nonStaticEntities.set(ent.id, ent);
         this.assignToChunk(ent);
-        this.updateStatic = true;
+        this.fullUpdate = true;
         return ent;
     }
 
@@ -121,8 +108,10 @@ export default class Model {
     }
 
     update(deltaMs: number) {
-        for (const e of this.entities.values()) {
-            (e as Entity).update(deltaMs);
+        // Only update non-static entities (static ones are guaranteed immobile/unchanging)
+        for (const e of this.nonStaticEntities.values()) {
+            e.update(deltaMs);
+            if (o11s.CPU_CHUNKS) this.updateChunkAssignment(e);
         }
         for (const cam of this.cameras) {
             cam.update(deltaMs);
@@ -130,28 +119,23 @@ export default class Model {
     }
 
     addComponentToEntity(id: string, component: any) {
-        const ent = this.entities.get(id);
+        const ent = this.getEntityById(id);
         if (!ent) return false;
         ent.addComponent(component);
+        // If a previously non-static entity becomes effectively static we won't migrate it; assumption given requirement.
         return true;
     }
 
     getEntityById(id: string) {
-        return this.entities.get(id);
+        return this.staticEntities.get(id) ?? this.nonStaticEntities.get(id);
     }
 
     public getObjectsSeparated(cameraId: string = 'main-camera'): { static: Entity[], nonStatic: Entity[] } {
         const camera = this.getCamera(cameraId);
         if (!camera) return { static: [], nonStatic: [] };
         if (!o11s.CPU_CHUNKS) {
-            // No chunking, return all objects
-            const staticEntities: Entity[] = [];
-            const nonStaticEntities: Entity[] = [];
-            this.entities.forEach(ent => {
-                if (ent.isStatic) staticEntities.push(ent);
-                else nonStaticEntities.push(ent);
-            });
-            return { static: staticEntities, nonStatic: nonStaticEntities };
+            // No chunking, return all objects from the two maps directly
+            return { static: Array.from(this.staticEntities.values()), nonStatic: Array.from(this.nonStaticEntities.values()) };
         }
 
         const camPos = camera.position;
@@ -165,17 +149,16 @@ export default class Model {
 
 
         // Return cached objects if camera chunk did not change
-        if (this.lastSceneObjectsCameraChunkKey === camChunkKey && !this.updateStatic) {
+        if (this.lastSceneObjectsCameraChunkKey === camChunkKey && !this.fullUpdate) {
             return {
                 static: this.cachedVisibleSceneObjects.static.slice(),
                 nonStatic: this.cachedVisibleSceneObjects.nonStatic.slice()
             };
         }
-        console.log(this.updateStatic)
         // First time or camera jumped far: recalc all
-        if (this.updateStatic || !this.lastSceneObjectsCameraChunkKey || Math.abs(camChunk.x - parseInt(this.lastSceneObjectsCameraChunkKey.split(',')[0])) > 2 || Math.abs(camChunk.y - parseInt(this.lastSceneObjectsCameraChunkKey.split(',')[1])) > 2 || Math.abs(camChunk.z - parseInt(this.lastSceneObjectsCameraChunkKey.split(',')[2])) > 2) {
+        if (this.fullUpdate || !this.lastSceneObjectsCameraChunkKey || Math.abs(camChunk.x - parseInt(this.lastSceneObjectsCameraChunkKey.split(',')[0])) > 2 || Math.abs(camChunk.y - parseInt(this.lastSceneObjectsCameraChunkKey.split(',')[1])) > 2 || Math.abs(camChunk.z - parseInt(this.lastSceneObjectsCameraChunkKey.split(',')[2])) > 2) {
             // Full recalc
-            console.log("Full recalculation of chunks, entities:" + this.entities.size);
+            console.log("Full recalculation of chunks, entities:" + (this.staticEntities.size + this.nonStaticEntities.size));
             const staticEntites: Entity[] = [];
             const nonStaticEntities: Entity[] = [];
             const chunkKeys = this.getChunkKeys(camChunk, renderDist);
