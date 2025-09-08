@@ -41,8 +41,8 @@ export class WebGPUView extends BaseView {
     private depthTexture?: GPUTexture;
     private renderPipeline?: GPURenderPipeline;
     private objectBuffers = new Map<string, { vertexBuffer: GPUBuffer; indexBuffer: GPUBuffer; indices: Uint32Array | Uint16Array }>();
-    private staticMeshBatches = new Map<string, { base: number; count: number }>();
-    private nonStaticMeshBatches = new Map<string, { base: number; count: number }>();
+    private staticMeshBatches = new Map<string, { base: number; count: number; meshId: string; textureId: string }>();
+    private nonStaticMeshBatches = new Map<string, { base: number; count: number; meshId: string; textureId: string }>();
     private nonStaticBaseOffset = 0;
     private bindGroup?: GPUBindGroup;
     private objectStorageBuffer?: GPUBuffer;
@@ -284,12 +284,10 @@ export class WebGPUView extends BaseView {
             // Optimized rendering: draw static objects first, then non-static objects, grouped by mesh+texture
             passEncoder.setBindGroup(0, this.bindGroup!);
             let objIndex = 0;
-            
             // First, draw all static objects grouped by mesh+texture
-            for (const [meshTextureId, batch] of this.staticMeshBatches) {
-                // Extract meshId from meshId-textureId
-                const meshId = meshTextureId.split('-')[0];
-                const buf = this.objectBuffers.get(meshId);
+            for (const [_, batch] of this.staticMeshBatches) {
+                const buf = this.objectBuffers.get(batch.meshId);
+                debug.log(buf ? "" : "No buffer for mesh " + batch.meshId);
                 if (!buf) continue;
                 passEncoder.setVertexBuffer(0, buf.vertexBuffer);
                 const indexFormat: GPUIndexFormat = buf.indices instanceof Uint16Array ? 'uint16' : 'uint32';
@@ -299,10 +297,8 @@ export class WebGPUView extends BaseView {
             }
             
             // Then, draw all non-static objects grouped by mesh+texture
-            for (const [meshTextureId, batch] of this.nonStaticMeshBatches) {
-                // Extract meshId from meshId-textureId
-                const meshId = meshTextureId.split('-')[0];
-                const buf = this.objectBuffers.get(meshId);
+            for (const [_, batch] of this.nonStaticMeshBatches) {
+                const buf = this.objectBuffers.get(batch.meshId);
                 if (!buf) continue;
                 passEncoder.setVertexBuffer(0, buf.vertexBuffer);
                 const indexFormat: GPUIndexFormat = buf.indices instanceof Uint16Array ? 'uint16' : 'uint32';
@@ -310,6 +306,7 @@ export class WebGPUView extends BaseView {
                 passEncoder.drawIndexed(buf.indices.length, batch.count, 0, 0, batch.base);
                 objIndex += batch.count;
             }
+            debug.log(`Drawn ${objIndex} objects in total.`);
 
             passEncoder.end();
             this.device.queue.submit([commandEncoder.finish()]);
@@ -463,7 +460,8 @@ export class WebGPUView extends BaseView {
         
         // First, add all static objects grouped by mesh+texture
         for (const [meshTextureId, arr] of staticGroups) {
-            const batch = { base: cursor, count: arr.length };
+            const firstMC = arr[0].getComponent(MeshComponent)!;
+            const batch = { base: cursor, count: arr.length, meshId: firstMC.mesh.id, textureId: firstMC.texture };
             this.staticMeshBatches.set(meshTextureId, batch);
             
             for (let i = 0; i < arr.length; i++) {
@@ -479,7 +477,8 @@ export class WebGPUView extends BaseView {
         // Then, add all non-static objects grouped by mesh+texture
         this.nonStaticBaseOffset = cursor;
         for (const [meshTextureId, arr] of nonStaticGroups) {
-            const batch = { base: cursor, count: arr.length };
+            const firstMC = arr[0].getComponent(MeshComponent)!;
+            const batch = { base: cursor, count: arr.length, meshId: firstMC.mesh.id, textureId: firstMC.texture };
             this.nonStaticMeshBatches.set(meshTextureId, batch);
             
             for (let i = 0; i < arr.length; i++) {
@@ -546,7 +545,8 @@ export class WebGPUView extends BaseView {
         let cursor = this.nonStaticBaseOffset;
         
         for (const [meshTextureId, arr] of nonStaticGroups) {
-            this.nonStaticMeshBatches.set(meshTextureId, { base: cursor, count: arr.length });
+            const firstMC = arr[0].getComponent(MeshComponent)!;
+            this.nonStaticMeshBatches.set(meshTextureId, { base: cursor, count: arr.length, meshId: firstMC.mesh.id, textureId: firstMC.texture });
             cursor += arr.length;
         }
         
