@@ -281,12 +281,14 @@ export class WebGPUView extends BaseView {
             const passEncoder = commandEncoder.beginRenderPass(renderPassDescriptor);
             passEncoder.setPipeline(this.renderPipeline);
 
-            // Optimized rendering: draw static objects first, then non-static objects, grouped by mesh
+            // Optimized rendering: draw static objects first, then non-static objects, grouped by mesh+texture
             passEncoder.setBindGroup(0, this.bindGroup!);
             let objIndex = 0;
             
-            // First, draw all static objects grouped by mesh
-            for (const [meshId, batch] of this.staticMeshBatches) {
+            // First, draw all static objects grouped by mesh+texture
+            for (const [meshTextureId, batch] of this.staticMeshBatches) {
+                // Extract meshId from meshId-textureId
+                const meshId = meshTextureId.split('-')[0];
                 const buf = this.objectBuffers.get(meshId);
                 if (!buf) continue;
                 passEncoder.setVertexBuffer(0, buf.vertexBuffer);
@@ -296,8 +298,10 @@ export class WebGPUView extends BaseView {
                 objIndex += batch.count;
             }
             
-            // Then, draw all non-static objects grouped by mesh
-            for (const [meshId, batch] of this.nonStaticMeshBatches) {
+            // Then, draw all non-static objects grouped by mesh+texture
+            for (const [meshTextureId, batch] of this.nonStaticMeshBatches) {
+                // Extract meshId from meshId-textureId
+                const meshId = meshTextureId.split('-')[0];
                 const buf = this.objectBuffers.get(meshId);
                 if (!buf) continue;
                 passEncoder.setVertexBuffer(0, buf.vertexBuffer);
@@ -388,6 +392,8 @@ export class WebGPUView extends BaseView {
                 { binding: 0, resource: { buffer: this.objectStorageBuffer! } },
                 { binding: 1, resource: { buffer: this.cameraBuffer! } },
                 { binding: 2, resource: { buffer: this.projectionBuffer! } },
+                { binding: 3, resource: this.textureSampler! },
+                { binding: 4, resource: this.primitiveTexture!.createView() },
             ] });
         }
     }
@@ -406,6 +412,8 @@ export class WebGPUView extends BaseView {
                 { binding: 0, resource: { buffer: this.objectStorageBuffer! } },
                 { binding: 1, resource: { buffer: this.cameraBuffer! } },
                 { binding: 2, resource: { buffer: this.projectionBuffer! } },
+                { binding: 3, resource: this.textureSampler! },
+                { binding: 4, resource: this.primitiveTexture!.createView() },
             ] });
             this.device.queue.writeBuffer(this.objectStorageBuffer!, 0, all.buffer, 0, all.byteLength);
             return;
@@ -423,18 +431,22 @@ export class WebGPUView extends BaseView {
     }
 
     private buildBatchesAndMatrixBuffer(staticObjs: Entity[], nonStaticObjs: Entity[]) {
-        // Group objects by mesh, keeping static and non-static separate
+        // Group objects by mesh+texture, keeping static and non-static separate
         const staticGroups = new Map<string, Entity[]>();
         const nonStaticGroups = new Map<string, Entity[]>();
         
         const pushStatic = (o: Entity) => {
-            const id = o.getComponent(MeshComponent)?.mesh.id!;
+            const meshComponent = o.getComponent(MeshComponent);
+            if (!meshComponent) return;
+            const id = `${meshComponent.mesh.id}-${meshComponent.texture}`;
             if (!staticGroups.has(id)) staticGroups.set(id, []);
             staticGroups.get(id)!.push(o);
         };
         
         const pushNonStatic = (o: Entity) => {
-            const id = o.getComponent(MeshComponent)?.mesh.id!;
+            const meshComponent = o.getComponent(MeshComponent);
+            if (!meshComponent) return;
+            const id = `${meshComponent.mesh.id}-${meshComponent.texture}`;
             if (!nonStaticGroups.has(id)) nonStaticGroups.set(id, []);
             nonStaticGroups.get(id)!.push(o);
         };
@@ -449,10 +461,10 @@ export class WebGPUView extends BaseView {
         
         let cursor = 0;
         
-        // First, add all static objects grouped by mesh
-        for (const [meshId, arr] of staticGroups) {
+        // First, add all static objects grouped by mesh+texture
+        for (const [meshTextureId, arr] of staticGroups) {
             const batch = { base: cursor, count: arr.length };
-            this.staticMeshBatches.set(meshId, batch);
+            this.staticMeshBatches.set(meshTextureId, batch);
             
             for (let i = 0; i < arr.length; i++) {
                 const o = arr[i];
@@ -464,11 +476,11 @@ export class WebGPUView extends BaseView {
             cursor += arr.length;
         }
         
-        // Then, add all non-static objects grouped by mesh
+        // Then, add all non-static objects grouped by mesh+texture
         this.nonStaticBaseOffset = cursor;
-        for (const [meshId, arr] of nonStaticGroups) {
+        for (const [meshTextureId, arr] of nonStaticGroups) {
             const batch = { base: cursor, count: arr.length };
-            this.nonStaticMeshBatches.set(meshId, batch);
+            this.nonStaticMeshBatches.set(meshTextureId, batch);
             
             for (let i = 0; i < arr.length; i++) {
                 const o = arr[i];
@@ -485,11 +497,13 @@ export class WebGPUView extends BaseView {
     }
 
     private buildNonStaticMatrixBuffer(nonStaticObjs: Entity[]): Float32Array {
-        // Group non-static objects by mesh
+        // Group non-static objects by mesh+texture
         const nonStaticGroups = new Map<string, Entity[]>();
         
         const pushNonStatic = (o: Entity) => {
-            const id = o.getComponent(MeshComponent)?.mesh.id!;
+            const meshComponent = o.getComponent(MeshComponent);
+            if (!meshComponent) return;
+            const id = `${meshComponent.mesh.id}-${meshComponent.texture}`;
             if (!nonStaticGroups.has(id)) nonStaticGroups.set(id, []);
             nonStaticGroups.get(id)!.push(o);
         };
@@ -515,11 +529,13 @@ export class WebGPUView extends BaseView {
     }
 
     private updateNonStaticBatches(nonStaticObjs: Entity[]): void {
-        // Group non-static objects by mesh and update batch information
+        // Group non-static objects by mesh+texture and update batch information
         const nonStaticGroups = new Map<string, Entity[]>();
         
         const pushNonStatic = (o: Entity) => {
-            const id = o.getComponent(MeshComponent)?.mesh.id!;
+            const meshComponent = o.getComponent(MeshComponent);
+            if (!meshComponent) return;
+            const id = `${meshComponent.mesh.id}-${meshComponent.texture}`;
             if (!nonStaticGroups.has(id)) nonStaticGroups.set(id, []);
             nonStaticGroups.get(id)!.push(o);
         };
@@ -529,8 +545,8 @@ export class WebGPUView extends BaseView {
         this.nonStaticMeshBatches.clear();
         let cursor = this.nonStaticBaseOffset;
         
-        for (const [meshId, arr] of nonStaticGroups) {
-            this.nonStaticMeshBatches.set(meshId, { base: cursor, count: arr.length });
+        for (const [meshTextureId, arr] of nonStaticGroups) {
+            this.nonStaticMeshBatches.set(meshTextureId, { base: cursor, count: arr.length });
             cursor += arr.length;
         }
         
