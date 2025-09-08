@@ -3,7 +3,6 @@ import type { Matrix4x4 } from '../Types/Matrix4x4';
 import * as V from '../misc/vec4';
 import * as M from '../misc/mat4';
 import { Entity } from './Entity';
-import MeshComponent from './Components/MeshComponent';
 import { o11s } from '../config/config';
 
 
@@ -167,17 +166,6 @@ export default class Model {
                 if (ids) {
                     ids.forEach(id => {
                         const ent = this.getEntityById(id);
-                        if (o11s.CPU_LOD) {
-                            const mc = ent && ent.getComponent(MeshComponent) as MeshComponent;
-                            // LOD logic
-                            const [kx, ky, kz] = key.split(',').map(Number);
-                            const ddx = kx - camChunk.x, ddy = ky - camChunk.y, ddz = kz - camChunk.z;
-                            if (Math.abs(ddx) > o11s.LOD_DISTANCE || Math.abs(ddy) > o11s.LOD_DISTANCE || Math.abs(ddz) > o11s.LOD_DISTANCE) {
-                                if (ent && mc) mc.LODReduce();
-                            } else if (ent && mc) {
-                                mc.restoreMesh();
-                            }
-                        }
                         if (ent) {
                             if (ent.isStatic) staticEntites.push(ent);
                             else nonStaticEntities.push(ent);
