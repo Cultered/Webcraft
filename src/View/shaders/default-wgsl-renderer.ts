@@ -40,12 +40,12 @@ fn vertex_main(in: VertexIn,@builtin(vertex_index) v_idx: u32, @builtin(instance
 @fragment
 fn fragment_main(fragData: VertexOut) -> @location(0) vec4f {
     // Simple directional light
-    let lightDir = normalize(vec3f(1.0, 1.0, 1.0));
+    let lightDir = normalize(vec3f(1.0, 1.0, 0.0));
     let lightColor = vec3f(1.0, 1.0, 1.0);
     let ambientColor = vec3f(0.2, 0.2, 0.2);
     
     // Basic material color
-    let materialColor = vec3f(0.7, 0.5, 0.3);
+    let materialColor = vec3f(1, 1, 1);
     
     // Calculate diffuse lighting using dot product of normal and light direction
     let dotNL = max(dot(fragData.worldNormal, lightDir), 0.0);
