@@ -7,5 +7,5 @@ export const o11s: Optimizations = {
     LOD_DISTANCE: 1,
     CPU_SOFT_FRUSTUM_CULLING: false,//needs fixing
     CPU_LOD: false,//needs mega fixing
-    USE_WEBGPU:true//WebGl temporarily broken
+    USE_WEBGPU:true//WebGL lighting implementation also working
 }
