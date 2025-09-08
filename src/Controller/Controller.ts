@@ -53,11 +53,11 @@ export default class Controller {
       this.view.registerSceneObjectsSeparated(
         separatedObjects.static,
         separatedObjects.nonStatic,
-        this.model.fullUpdate
+        this.model.updateStatic
       )
     );
-    if (this.model.fullUpdate) {
-      this.model.fullUpdate = false;
+    if (this.model.updateStatic) {
+      this.model.updateStatic = false;
     }
     const mainCam = this.model.getCamera(this.camId);
     if (!mainCam) { console.error("No main camera"); return }

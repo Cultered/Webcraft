@@ -12,7 +12,7 @@ export default class Model {
     // Unified entities map removed. We now explicitly track static vs non-static sets.
     private staticEntities:  Map<string, Entity> = new Map();
     private nonStaticEntities:  Map<string, Entity> = new Map();
-    public fullUpdate: boolean = true;
+    public updateStatic: boolean = true;
     private cameras: Entity[] = [];
     private chunks: Map<string, string[]> = new Map();
     private cachedVisibleSceneObjects: { static: Entity[], nonStatic: Entity[] } = { static: [], nonStatic: [] };
@@ -29,7 +29,7 @@ export default class Model {
         }
         if (ent.isStatic) this.staticEntities.set(ent.id, ent); else this.nonStaticEntities.set(ent.id, ent);
         this.assignToChunk(ent);
-        this.fullUpdate = true;
+        this.updateStatic = true;
         return ent;
     }
 
@@ -149,14 +149,14 @@ export default class Model {
 
 
         // Return cached objects if camera chunk did not change
-        if (this.lastSceneObjectsCameraChunkKey === camChunkKey && !this.fullUpdate) {
+        if (this.lastSceneObjectsCameraChunkKey === camChunkKey && !this.updateStatic) {
             return {
                 static: this.cachedVisibleSceneObjects.static.slice(),
                 nonStatic: this.cachedVisibleSceneObjects.nonStatic.slice()
             };
         }
         // First time or camera jumped far: recalc all
-        if (this.fullUpdate || !this.lastSceneObjectsCameraChunkKey || Math.abs(camChunk.x - parseInt(this.lastSceneObjectsCameraChunkKey.split(',')[0])) > 2 || Math.abs(camChunk.y - parseInt(this.lastSceneObjectsCameraChunkKey.split(',')[1])) > 2 || Math.abs(camChunk.z - parseInt(this.lastSceneObjectsCameraChunkKey.split(',')[2])) > 2) {
+        if (this.updateStatic || !this.lastSceneObjectsCameraChunkKey || Math.abs(camChunk.x - parseInt(this.lastSceneObjectsCameraChunkKey.split(',')[0])) > 2 || Math.abs(camChunk.y - parseInt(this.lastSceneObjectsCameraChunkKey.split(',')[1])) > 2 || Math.abs(camChunk.z - parseInt(this.lastSceneObjectsCameraChunkKey.split(',')[2])) > 2) {
             // Full recalc
             console.log("Full recalculation of chunks, entities:" + (this.staticEntities.size + this.nonStaticEntities.size));
             const staticEntites: Entity[] = [];
@@ -192,38 +192,6 @@ export default class Model {
         console.log('updating chunks');
         // Otherwise, only update edge chunks
         const lastChunk = this.lastSceneObjectsCameraChunkKey.split(',').map(Number);
-        //LOD 
-        if (o11s.CPU_LOD) {
-            const newLod = this.getChunkKeys(camChunk, o11s.LOD_DISTANCE);
-            const oldLod = this.getChunkKeys({ x: lastChunk[0], y: lastChunk[1], z: lastChunk[2] }, o11s.LOD_DISTANCE);
-            const lodRestore = Array.from(newLod).filter((k: string) => !oldLod.has(k));
-            const lodReduce = Array.from(oldLod).filter((k: string) => !newLod.has(k));
-            lodRestore.forEach(key => {
-                const ids = this.chunks.get(key);
-                if (ids) {
-                    ids.forEach(id => {
-                        const ent = this.getEntityById(id);
-                        if (ent) {
-                            const mc = ent.getComponent(MeshComponent);
-                            if (mc) mc.restoreMesh();
-                        }
-                    });
-                }
-            });
-            lodReduce.forEach(key => {
-                const ids = this.chunks.get(key);
-                if (ids) {
-                    ids.forEach(id => {
-                        const ent = this.getEntityById(id);
-                        if (ent) {
-                            const mc = ent.getComponent(MeshComponent);
-                            if (mc) mc.LODReduce();
-                        }
-                    });
-                }
-            });
-            console.log(`LOD: Restored ${lodRestore.length} chunks, Reduced ${lodReduce.length} chunks.`);
-        }
         // Find new and old edge chunks
         const prevKeys = this.getChunkKeys({ x: lastChunk[0], y: lastChunk[1], z: lastChunk[2] }, renderDist);
         const newKeys = this.getChunkKeys(camChunk, renderDist);
@@ -233,29 +201,28 @@ export default class Model {
         const removeKeys = Array.from(prevKeys).filter((k: string) => !newKeys.has(k));
 
         // Remove objects from chunks now outside render distance
-        let staticEntities = this.cachedVisibleSceneObjects.static.filter(obj => {
+        let staticVisibleEntities = this.cachedVisibleSceneObjects.static.filter(obj => {
             return !obj.chunkKey || !removeKeys.includes(obj.chunkKey as string);
         });
-        let nonStaticEntities = this.cachedVisibleSceneObjects.nonStatic.filter(obj => {
+        let nonStaticVisibleEntities = this.cachedVisibleSceneObjects.nonStatic.filter(obj => {
             return !obj.chunkKey || !removeKeys.includes(obj.chunkKey as string);
         });
-        console.log(`Removed ${this.cachedVisibleSceneObjects.static.length - staticEntities.length} static and ${this.cachedVisibleSceneObjects.nonStatic.length - nonStaticEntities.length} non-static objects due to chunk removal.`);
-
+        this.updateStatic = true
         addKeys.forEach(key => {
             const ids = this.chunks.get(key);
             if (ids) {
                 ids.forEach(id => {
                     const ent = this.getEntityById(id);
                     if (ent) {
-                        if (ent.isStatic) staticEntities.push(ent);
-                        else nonStaticEntities.push(ent);
+                        if (ent.isStatic) staticVisibleEntities.push(ent);
+                        else nonStaticVisibleEntities.push(ent);
                     }
                 });
             }
         });
 
-        this.cachedVisibleSceneObjects = { static: staticEntities, nonStatic: nonStaticEntities };
+        this.cachedVisibleSceneObjects = { static: staticVisibleEntities, nonStatic: nonStaticVisibleEntities };
         this.lastSceneObjectsCameraChunkKey = camChunkKey;
-        return { static: staticEntities.slice(), nonStatic: nonStaticEntities.slice() };
+        return { static: staticVisibleEntities.slice(), nonStatic: nonStaticVisibleEntities.slice() };
     }
 }

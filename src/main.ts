@@ -82,11 +82,11 @@ import Rotator from './Model/Components/Rotator';
     }
 
     // Use common defaults
-    const R = 100, r = 15, p = 16, q = 17, Nu = 20, Nv = 1000;
+    const R = 500, r = 70, p = 16, q = 17, Nu = 20, Nv = 1000;
     const tubePoints = torusTube(R, r, p, q, Nu, Nv);
     tubePoints.forEach(([x, y, z], idx) => {
         const id = `torusTubeSphere-${idx}`;
-        const ent = new Entity(id, V.vec4(x, y, z), undefined, V.vec4(1, 1, 1, 1), true);
+        const ent = new Entity(id, V.vec4(x, y, z), undefined, V.vec4(5, 5, 5, 1), true);
         ent.addComponent(sphereComponent);
         model.addEntity(ent);
     });

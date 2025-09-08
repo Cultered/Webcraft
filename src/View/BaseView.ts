@@ -13,7 +13,7 @@ export abstract class BaseView {
     public maxObjects = 1_000_000;
     protected fov = radians(80);
     protected near = 0.1;
-    protected far = 1000;
+    protected far = 10000;
     protected meshes: { [id: string]: Mesh } = {};
     protected sceneObjects: Entity[] = [];
     protected staticSceneObjects: Entity[] = [];
