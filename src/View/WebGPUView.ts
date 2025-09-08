@@ -133,7 +133,16 @@ export class WebGPUView extends BaseView {
                     ]
                 });
 
-                const vertexBuffers = [{ attributes: [{ shaderLocation: 0, offset: 0, format: 'float32x3' }], arrayStride: 12, stepMode: 'vertex' }];
+                const vertexBuffers = [
+                    { 
+                        attributes: [
+                            { shaderLocation: 0, offset: 0, format: 'float32x3' },  // position
+                            { shaderLocation: 1, offset: 12, format: 'float32x3' }  // normal (12 bytes after position)
+                        ], 
+                        arrayStride: 24,  // 6 floats * 4 bytes = 24 bytes per vertex (position + normal)
+                        stepMode: 'vertex' 
+                    }
+                ];
 
                 const pipelineDescriptor = {
                     vertex: { module: shaderModule, entryPoint: 'vertex_main', buffers: vertexBuffers },
@@ -220,8 +229,8 @@ export class WebGPUView extends BaseView {
         }
     }
 
-    public uploadMeshToGPU(meshId: string, vertices: Float32Array, indices: Uint32Array | Uint16Array): void {
-        this.meshes[meshId] = { id: meshId, vertices, indices };
+    public uploadMeshToGPU(meshId: string, vertices: Float32Array, normals: Float32Array, indices: Uint32Array | Uint16Array): void {
+        this.meshes[meshId] = { id: meshId, vertices, normals, indices };
         if (this.device) this.createBuffersForMesh(meshId);
     }
 
@@ -295,13 +304,43 @@ export class WebGPUView extends BaseView {
         if (this.objectBuffers.has(meshId)) return;
         const mesh = this.meshes[meshId];
         if (!mesh) return;
-        const v = mesh.vertices;
-        const i = mesh.indices;
-        const vertexBuffer = this.device.createBuffer({ size: v.byteLength, usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST });
-        this.device.queue.writeBuffer(vertexBuffer, 0, v.buffer as ArrayBuffer, v.byteOffset, v.byteLength);
-        const indexBuffer = this.device.createBuffer({ size: i.byteLength, usage: GPUBufferUsage.INDEX | GPUBufferUsage.COPY_DST });
-        this.device.queue.writeBuffer(indexBuffer, 0, i.buffer as ArrayBuffer, i.byteOffset, i.byteLength);
-        this.objectBuffers.set(meshId, { vertexBuffer, indexBuffer, indices: i });
+        
+        const vertices = mesh.vertices;
+        const normals = mesh.normals;
+        const indices = mesh.indices;
+        
+        // Interleave vertices and normals: [x, y, z, nx, ny, nz, x, y, z, nx, ny, nz, ...]
+        const vertexCount = vertices.length / 3;
+        const interleavedData = new Float32Array(vertexCount * 6); // 3 for position + 3 for normal
+        
+        for (let i = 0; i < vertexCount; i++) {
+            const baseIdx = i * 6;
+            const vertIdx = i * 3;
+            
+            // Copy position
+            interleavedData[baseIdx + 0] = vertices[vertIdx + 0];
+            interleavedData[baseIdx + 1] = vertices[vertIdx + 1];
+            interleavedData[baseIdx + 2] = vertices[vertIdx + 2];
+            
+            // Copy normal
+            interleavedData[baseIdx + 3] = normals[vertIdx + 0];
+            interleavedData[baseIdx + 4] = normals[vertIdx + 1];
+            interleavedData[baseIdx + 5] = normals[vertIdx + 2];
+        }
+        
+        const vertexBuffer = this.device.createBuffer({ 
+            size: interleavedData.byteLength, 
+            usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST 
+        });
+        this.device.queue.writeBuffer(vertexBuffer, 0, interleavedData.buffer);
+        
+        const indexBuffer = this.device.createBuffer({ 
+            size: indices.byteLength, 
+            usage: GPUBufferUsage.INDEX | GPUBufferUsage.COPY_DST 
+        });
+        this.device.queue.writeBuffer(indexBuffer, 0, indices.buffer as ArrayBuffer, indices.byteOffset, indices.byteLength);
+        
+        this.objectBuffers.set(meshId, { vertexBuffer, indexBuffer, indices });
     }
 
 

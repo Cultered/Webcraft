@@ -10,6 +10,15 @@ export const LOD_MESH: Mesh = {
             0, 0, 1,
             0, 0, -1]
         ),
+        // For octahedron vertices, normals are the same as normalized positions
+        normals: new Float32Array(
+            [1, 0, 0,
+            -1, 0, 0,
+            0, 1, 0,
+            0, -1, 0,
+            0, 0, 1,
+            0, 0, -1]
+        ),
 
         // Initial faces (triangles) of the octahedron
         indices: new Uint32Array([
@@ -73,9 +82,12 @@ export function generateSphereMesh(subdivisions: number, radius: number) {
 
     // Flatten vertices and scale to requested radius
     const outVerts: number[] = [];
+    const outNormals: number[] = [];
     for (const v of verts) {
         const n = normalize(v);
         outVerts.push(n[0] * radius, n[1] * radius, n[2] * radius);
+        // For spheres, normals are the same as normalized vertex positions
+        outNormals.push(n[0], n[1], n[2]);
     }
 
     // Build indices
@@ -89,34 +101,57 @@ export function generateSphereMesh(subdivisions: number, radius: number) {
 
     return {
         vertices: new Float32Array(outVerts),
+        normals: new Float32Array(outNormals),
         indices: indexArray,
     };
 }
 
 export function generateCubeMesh(size: number) {
     const hs = size;
+    
+    // Define vertices for each face separately to have proper normals
     const vertices = [
-        -hs, -hs, -hs,
-        hs, -hs, -hs,
-        hs, hs, -hs,
-        -hs, hs, -hs,
-        -hs, -hs, hs,
-        hs, -hs, hs,
-        hs, hs, hs,
-        -hs, hs, hs,
+        // Front face
+        -hs, -hs,  hs,   hs, -hs,  hs,   hs,  hs,  hs,  -hs,  hs,  hs,
+        // Back face  
+        -hs, -hs, -hs,  -hs,  hs, -hs,   hs,  hs, -hs,   hs, -hs, -hs,
+        // Top face
+        -hs,  hs, -hs,  -hs,  hs,  hs,   hs,  hs,  hs,   hs,  hs, -hs,
+        // Bottom face
+        -hs, -hs, -hs,   hs, -hs, -hs,   hs, -hs,  hs,  -hs, -hs,  hs,
+        // Right face
+         hs, -hs, -hs,   hs,  hs, -hs,   hs,  hs,  hs,   hs, -hs,  hs,
+        // Left face
+        -hs, -hs, -hs,  -hs, -hs,  hs,  -hs,  hs,  hs,  -hs,  hs, -hs
+    ];
+
+    const normals = [
+        // Front face (0, 0, 1)
+        0, 0, 1,  0, 0, 1,  0, 0, 1,  0, 0, 1,
+        // Back face (0, 0, -1)
+        0, 0, -1, 0, 0, -1, 0, 0, -1, 0, 0, -1,
+        // Top face (0, 1, 0)
+        0, 1, 0,  0, 1, 0,  0, 1, 0,  0, 1, 0,
+        // Bottom face (0, -1, 0)
+        0, -1, 0, 0, -1, 0, 0, -1, 0, 0, -1, 0,
+        // Right face (1, 0, 0)
+        1, 0, 0,  1, 0, 0,  1, 0, 0,  1, 0, 0,
+        // Left face (-1, 0, 0)
+        -1, 0, 0, -1, 0, 0, -1, 0, 0, -1, 0, 0
     ];
 
     const indices = [
-        0, 2, 1, 0, 3, 2,
-        4, 5, 6, 4, 6, 7,
-        4, 1, 5, 4, 0, 1,
-        3, 6, 2, 3, 7, 6,
-        1, 6, 5, 1, 2, 6,
-        4, 3, 0, 4, 7, 3,
+        0,  1,  2,   0,  2,  3,    // Front face
+        4,  5,  6,   4,  6,  7,    // Back face
+        8,  9,  10,  8,  10, 11,   // Top face
+        12, 13, 14,  12, 14, 15,   // Bottom face
+        16, 17, 18,  16, 18, 19,   // Right face
+        20, 21, 22,  20, 22, 23    // Left face
     ];
 
     return {
         vertices: new Float32Array(vertices),
+        normals: new Float32Array(normals),
         indices: new Uint16Array(indices),
     };
 }

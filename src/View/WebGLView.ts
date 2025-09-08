@@ -141,8 +141,8 @@ export class WebGLView extends BaseView {
         }
     }
 
-    public uploadMeshToGPU(meshId: string, vertices: Float32Array, indices: Uint32Array | Uint16Array): void {
-        this.meshes[meshId] = { id: meshId, vertices, indices };
+    public uploadMeshToGPU(meshId: string, vertices: Float32Array, normals: Float32Array, indices: Uint32Array | Uint16Array): void {
+        this.meshes[meshId] = { id: meshId, vertices, normals, indices };
         if (this.gl) this.createWebGLBuffersForMesh(meshId);
     }
 
@@ -198,8 +198,14 @@ export class WebGLView extends BaseView {
 
                     // Bind vertex buffer
                     gl.bindBuffer(gl.ARRAY_BUFFER, buf.vertexBuffer);
+                    
+                    // Set up position attribute (location 0)
                     gl.enableVertexAttribArray(0);
-                    gl.vertexAttribPointer(0, 3, gl.FLOAT, false, 12, 0);
+                    gl.vertexAttribPointer(0, 3, gl.FLOAT, false, 24, 0); // stride=24 (6 floats), offset=0
+                    
+                    // Set up normal attribute (location 1)
+                    gl.enableVertexAttribArray(1);
+                    gl.vertexAttribPointer(1, 3, gl.FLOAT, false, 24, 12); // stride=24, offset=12 (after 3 position floats)
 
                     // Bind index buffer
                     gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, buf.indexBuffer);
@@ -264,23 +270,43 @@ export class WebGLView extends BaseView {
         if (!mesh) return;
 
         const gl = this.gl;
-        const v = mesh.vertices;
-        const i = mesh.indices;
+        const vertices = mesh.vertices;
+        const normals = mesh.normals;
+        const indices = mesh.indices;
 
-        // Create vertex buffer
+        // Interleave vertices and normals: [x, y, z, nx, ny, nz, x, y, z, nx, ny, nz, ...]
+        const vertexCount = vertices.length / 3;
+        const interleavedData = new Float32Array(vertexCount * 6); // 3 for position + 3 for normal
+        
+        for (let i = 0; i < vertexCount; i++) {
+            const baseIdx = i * 6;
+            const vertIdx = i * 3;
+            
+            // Copy position
+            interleavedData[baseIdx + 0] = vertices[vertIdx + 0];
+            interleavedData[baseIdx + 1] = vertices[vertIdx + 1];
+            interleavedData[baseIdx + 2] = vertices[vertIdx + 2];
+            
+            // Copy normal
+            interleavedData[baseIdx + 3] = normals[vertIdx + 0];
+            interleavedData[baseIdx + 4] = normals[vertIdx + 1];
+            interleavedData[baseIdx + 5] = normals[vertIdx + 2];
+        }
+
+        // Create vertex buffer with interleaved data
         const vertexBuffer = gl.createBuffer();
         if (!vertexBuffer) return;
         
         gl.bindBuffer(gl.ARRAY_BUFFER, vertexBuffer);
-        gl.bufferData(gl.ARRAY_BUFFER, v, gl.STATIC_DRAW);
+        gl.bufferData(gl.ARRAY_BUFFER, interleavedData, gl.STATIC_DRAW);
 
         // Create index buffer
         const indexBuffer = gl.createBuffer();
         if (!indexBuffer) return;
         
         gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, indexBuffer);
-        gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, i, gl.STATIC_DRAW);
+        gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, indices, gl.STATIC_DRAW);
 
-        this.glVertexBuffers.set(meshId, { vertexBuffer, indexBuffer, indices: i });
+        this.glVertexBuffers.set(meshId, { vertexBuffer, indexBuffer, indices });
     }
 }

@@ -25,9 +25,9 @@ import Rotator from './Model/Components/Rotator';
     const sphereMesh = { id: 'builtin-sphere', ...generateSphereMesh(3, 1) };
     const cubeMesh = { id: 'builtin-cube', ...generateCubeMesh(1) };
 
-    view.uploadMeshToGPU(sphereMesh.id, sphereMesh.vertices, sphereMesh.indices);
-    view.uploadMeshToGPU(cubeMesh.id, cubeMesh.vertices, cubeMesh.indices);
-    view.uploadMeshToGPU(LOD_MESH.id, LOD_MESH.vertices, LOD_MESH.indices);
+    view.uploadMeshToGPU(sphereMesh.id, sphereMesh.vertices, sphereMesh.normals, sphereMesh.indices);
+    view.uploadMeshToGPU(cubeMesh.id, cubeMesh.vertices, cubeMesh.normals, cubeMesh.indices);
+    view.uploadMeshToGPU(LOD_MESH.id, LOD_MESH.vertices, LOD_MESH.normals, LOD_MESH.indices);
                 const sphereComponent = new MeshComponent(sphereMesh, true);
 
     // Torus tube algorithm (translated from Python)
