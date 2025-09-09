@@ -8,12 +8,16 @@ import debug from '../../Debug/Debug';
 export default class Freecam implements Component {
   private keys: Set<string> = new Set();
   private mouseSensitivity = 0.0025;
-  private canvasEl?: HTMLCanvasElement;
+  private lockElement!: HTMLCanvasElement;
   private entity?: Entity;
   private lastSpeedBoost = 1;
 
-  constructor(canvasEl: HTMLCanvasElement) {
-    this.canvasEl = canvasEl;
+  constructor(lockElement?: HTMLCanvasElement) {
+    if (lockElement) {
+      this.lockElement = lockElement;
+    }else{
+      this.lockElement = document.querySelector('#main-canvas') as HTMLCanvasElement;
+    }
   }
 
   start(entity: Entity) {
@@ -21,11 +25,11 @@ export default class Freecam implements Component {
     console.log('Freecam component started on entity', entity.id);
     window.addEventListener('keydown', this.onKeyDown);
     window.addEventListener('keyup', this.onKeyUp);
-    this.canvasEl?.addEventListener('click', () => {
-      this.canvasEl?.requestPointerLock?.();
+    this.lockElement?.addEventListener('click', () => {
+      this.lockElement?.requestPointerLock?.();
     });
     document.addEventListener('pointerlockchange', () => {
-      if (document.pointerLockElement === this.canvasEl) {
+      if (document.pointerLockElement === this.lockElement) {
         document.addEventListener('mousemove', this.onMouseMove);
       } else {
         document.removeEventListener('mousemove', this.onMouseMove);
@@ -37,7 +41,7 @@ export default class Freecam implements Component {
     if (!entity) return;
     const delta = (deltaMs ?? 0) / 1000;
     const speedBase = this.keys.has('shift') ? 30*this.lastSpeedBoost : 3;
-    if(this.keys.has("shift"))this.lastSpeedBoost*=1.35*delta
+    if(this.keys.has("shift"))this.lastSpeedBoost*=1.35**delta
     else this.lastSpeedBoost = 1
     debug.log(this.lastSpeedBoost.toFixed(20))
     const forwardVec = vec4Scale(vec4(), forward(), speedBase * delta);

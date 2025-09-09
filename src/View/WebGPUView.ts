@@ -207,6 +207,20 @@ export class WebGPUView extends BaseView {
         this.nonStaticSceneObjects = nonStaticObjects;
 
         if (updateStatic) {
+            // When static data is refreshed, make sure all meshes referenced by either
+            // static or non-static entities have GPU buffers created. This avoids
+            // rendering stalls later if a mesh appears first in a static rebuild.
+            const ensureMeshUploaded = (e: Entity) => {
+                const mc = e.getComponent(MeshComponent);
+                if (!mc) return;
+                const m = mc.mesh;
+                // Only create GPU buffers if we don't already have them
+                if (!this.objectBuffers.has(m.id)) {
+                    this.uploadMeshToGPU(m.id, m.vertices, m.normals, m.uvs, m.indices);
+                }
+            };
+            for (const e of staticObjects) ensureMeshUploaded(e);
+            for (const e of nonStaticObjects) ensureMeshUploaded(e);
             // Update entire buffer including static objects
             this.updateObjectStorageBufferWithSeparation(staticObjects, nonStaticObjects);
         } else {

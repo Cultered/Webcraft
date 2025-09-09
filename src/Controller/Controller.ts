@@ -1,49 +1,48 @@
 import Model from '../Model/Model';
+import { createView } from '../View/View';
 import { BaseView } from '../View/BaseView';
 import debug from '../Debug/Debug';
-export default class Controller {
-  private model: Model;
-  private view: BaseView;
-  private canvasEl?: HTMLCanvasElement;
+import { o11s } from '../config/config';
+
+export let DELTA_TIME = 0;
+
+export default class Controller{
+  public model!: Model;
+  public view!: BaseView;
   private camId: string;
   private lastTime: number = performance.now();
 
-  public hello() {
-    console.log("Hi")
-  }
-
-  constructor(model: Model, view: BaseView, camId = 'main-camera') {
-    this.model = model;
-    this.view = view;
+  constructor(camId='main-camera') {
     this.camId = camId;
-    const canvasEl = document.querySelector('#main-canvas') as HTMLCanvasElement;
-    this.init(canvasEl)
   }
 
-  init(canvasEl: HTMLCanvasElement) {
-    this.canvasEl = canvasEl;
-    this.canvasEl.addEventListener('click', () => {
-      this.canvasEl?.requestPointerLock?.();
+  async init() {
+    this.model = new Model();
+    this.view = await createView(o11s.USE_WEBGPU);
+    const canvasEl = document.querySelector('#main-canvas') as HTMLCanvasElement;
+    canvasEl.addEventListener('click', () => {
+      canvasEl?.requestPointerLock?.();
     });
     requestAnimationFrame(this.controllerLoop);
   }
 
-  private delta() {
+  private updateDeltaTime() {
     const now = performance.now();
-    const delta = now - this.lastTime;
+    DELTA_TIME = now - this.lastTime;
     this.lastTime = now;
-    return delta;
+    return DELTA_TIME;
   }
 
   private controllerLoop = () => {
     debug.perf("controller-loop", () => {
-      debug.log(`Controller ready`);
-      debug.perf("model-update",()=>this.model.update(this.delta()));
+      debug.log(`Controller ready`);  
+      debug.perf("model-update",()=>this.model.update(DELTA_TIME));
       debug.log(this.model.getCamera(this.camId)?.position.reduce((prev, val) => prev + val.toFixed(2) + " ", "") || "No camera");
       this.renderLoop();
       requestAnimationFrame(this.controllerLoop);
       debug.flush();
     });
+    this.updateDeltaTime();
   }
 
   private renderLoop = () => {

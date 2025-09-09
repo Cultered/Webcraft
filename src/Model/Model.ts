@@ -35,6 +35,7 @@ export default class Model {
     addCamera(id: string, position?: Vector4, rotation?: Matrix4x4) {
         const cam = new Entity(id, position ?? V.vec4(0, 0, 0, 0), rotation ?? M.mat4Identity(), V.vec4(1, 1, 1, 1));
         this.cameras.push(cam);
+        return cam;
     }
 
 

@@ -57,4 +57,6 @@ export abstract class BaseView {
      * Upload a single mesh to GPU
      */
     public abstract uploadMeshToGPU(meshId: string, vertices: Float32Array, normals: Float32Array, uvs: Float32Array, indices: Uint32Array | Uint16Array): void;
+
+    public abstract uploadTextureFromImageData(textureId: string, imageData: ImageData): void;
 }
