@@ -190,8 +190,37 @@ export function generateCubeMesh(size: number) {
 
 /**
  * Load a mesh from OBJ file content
+ * 
+ * Parses Wavefront OBJ format and creates a mesh compatible with the rendering pipeline.
+ * Supports vertices (v), normals (vn), texture coordinates (vt), and faces (f).
+ * Automatically triangulates quad faces and higher-order polygons.
+ * 
  * @param objContent - The content of the .obj file as a string
- * @returns A Mesh object compatible with the rendering pipeline
+ * @returns A Mesh object compatible with the rendering pipeline (without id field)
+ * 
+ * @example
+ * ```typescript
+ * import { loadOBJ } from './Types/MeshUtils';
+ * import { loadOBJFile } from './misc/loadFiles';
+ * 
+ * // Load from string content
+ * const objContent = `
+ * v 0.0 0.0 0.0
+ * v 1.0 0.0 0.0
+ * v 0.5 1.0 0.0
+ * f 1 2 3
+ * `;
+ * const meshData = loadOBJ(objContent);
+ * const mesh = { id: 'my-obj-mesh', ...meshData };
+ * 
+ * // Use like any other mesh
+ * view.uploadMeshToGPU(mesh.id, mesh.vertices, mesh.normals, mesh.uvs, mesh.indices);
+ * const meshComponent = new MeshComponent(mesh, true, 'my-texture');
+ * 
+ * // Load from file (async)
+ * const objFileContent = await loadOBJFile('/models/my-model.obj');
+ * const meshFromFile = { id: 'loaded-mesh', ...loadOBJ(objFileContent) };
+ * ```
  */
 export function loadOBJ(objContent: string): Omit<Mesh, 'id'> {
     const lines = objContent.split('\n').map(line => line.trim()).filter(line => line && !line.startsWith('#'));
