@@ -122,17 +122,33 @@ export function sphere(radius: number, stacks: number, slices: number): [number,
  * @param slices Longitude divisions
  * @returns Combined unique points for all spheres
  */
-export function sphere2(centersSphereRadius: number, centerStacks: number, centerSlices: number, sphereRadius: number | number[], stacks: number, slices: number): [number, number, number][] {
+export function sphere2(sphereRadius: number, stacks: number, slices: number): [number, number, number][] {
     /**
      * centersSphereRadius: radius of the sphere on which centers are placed
      * centerStacks/centerSlices: resolution for center distribution
      * sphereRadius: radius (or array of radii) for generated spheres at each center
      * stacks/slices: resolution of each generated sphere surface
      */
-    const centers = sphere(centersSphereRadius, centerStacks, centerSlices);
+    const centers = sphere(sphereRadius*stacks, stacks, slices);
     const out: [number, number, number][] = [];
-    centers.forEach((c, idx) => {
-        const r = Array.isArray(sphereRadius) ? (sphereRadius[idx] ?? sphereRadius[sphereRadius.length - 1]) : sphereRadius;
+    centers.forEach((c) => {
+        const r = sphereRadius;
+        const base = sphere(r, stacks, slices);
+        for (const p of base) {
+            const x = p[0] + c[0];
+            const y = p[1] + c[1];
+            const z = p[2] + c[2];
+            if (!out.some(q => q[0] === x && q[1] === y && q[2] === z)) out.push([x, y, z]);
+        }
+    });
+    return out;
+}
+
+export function sphere3(sphereRadius: number, stacks: number, slices: number): [number, number, number][] {
+    const centers = sphere2(sphereRadius*stacks, stacks, slices);
+    const out: [number, number, number][] = [];
+    centers.forEach((c) => {
+        const r = sphereRadius;
         const base = sphere(r, stacks, slices);
         for (const p of base) {
             const x = p[0] + c[0];

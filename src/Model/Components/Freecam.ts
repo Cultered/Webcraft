@@ -9,6 +9,7 @@ export default class Freecam implements Component {
   private mouseSensitivity = 0.0025;
   private canvasEl?: HTMLCanvasElement;
   private entity?: Entity;
+  private lastSpeedBoost = 1;
 
   constructor(canvasEl: HTMLCanvasElement) {
     this.canvasEl = canvasEl;
@@ -34,7 +35,9 @@ export default class Freecam implements Component {
   update(entity: Entity, deltaMs?: number) {
     if (!entity) return;
     const delta = (deltaMs ?? 0) / 1000;
-    const speedBase = this.keys.has('shift') ? 150 : 3;
+    const speedBase = this.keys.has('shift') ? 30*this.lastSpeedBoost : 3;
+    if(this.keys.has("shift"))this.lastSpeedBoost*=1.5**delta
+    else this.lastSpeedBoost = 1
     const forwardVec = vec4Scale(vec4(), forward(), speedBase * delta);
     const rightVec = vec4Scale(vec4(), right(), speedBase * delta);
     const upVec = vec4Scale(vec4(), up(), speedBase * delta);

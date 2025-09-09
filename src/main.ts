@@ -5,12 +5,11 @@ import Controller from './Controller/Controller';
 import MeshComponent from './Model/Components/MeshComponent';
 import { Entity } from './Model/Entity';
 import { generateSphereMesh, generateCubeMesh, LOD_MESH } from './Types/MeshUtils';
-import * as M from './misc/mat4'
-import * as V from './misc/vec4';
+import {mat4Rotation} from './misc/mat4'
+import {vec4} from './misc/vec4';
 import Rotator from './Model/Components/Rotator';
-// Added: import texture asset (Vite will turn this into a URL)
 import exampleTextureUrl from './misc/lex.png';
-import { sphere2 } from './misc/misc';
+import { sphere3 } from './misc/misc';
 import { loadImageData } from './misc/loadFiles';
 
 (async () => {
@@ -19,7 +18,7 @@ import { loadImageData } from './misc/loadFiles';
     const controller = new Controller(model, view);
     controller.hello()
 
-    model.addCamera('main-camera', V.vec4(0, 0, 0), M.mat4Rotation(0, Math.PI, 0));
+    model.addCamera('main-camera', vec4(0, 0, 0), mat4Rotation(0, Math.PI, 0));
     const mainCam = model.getCamera('main-camera');
     if (mainCam) {
         const canvasEl = document.querySelector('#main-canvas') as HTMLCanvasElement;
@@ -27,10 +26,8 @@ import { loadImageData } from './misc/loadFiles';
         mainCam.addComponent(new Freecam(canvasEl));
     }
 
-    // Helper: load Image -> ImageData
     
 
-    // Load & upload example texture (id: 'example-texture')
     try {
         const imageData = await loadImageData(exampleTextureUrl);
         (view as any).uploadTextureFromImageData?.('example-texture', imageData);
@@ -43,21 +40,19 @@ import { loadImageData } from './misc/loadFiles';
     view.uploadMeshToGPU(cubeMesh.id, cubeMesh.vertices, cubeMesh.normals, cubeMesh.uvs, cubeMesh.indices);
     view.uploadMeshToGPU(LOD_MESH.id, LOD_MESH.vertices, LOD_MESH.normals, LOD_MESH.uvs, LOD_MESH.indices);
 
-    // Use texture on all sphere instances
     const sphereComponent = new MeshComponent(sphereMesh, true, 'example-texture');
 
 
-    const tubePoints = sphere2(1000, 10, 20, 100, 10, 10);
-    tubePoints.forEach(([x, y, z], idx) => {
+    const points = sphere3(20, 6, 7);
+    points.forEach(([x, y, z], idx) => {
         const id = `torusTubeSphere-${idx}`;
-        const ent = new Entity(id, V.vec4(x, y, z), undefined, V.vec4(5, 5, 5, 1), true);
+        const ent = new Entity(id, vec4(x, y, z), undefined, vec4(3, 3, 3, 1), true);
         ent.addComponent(sphereComponent);
         model.addEntity(ent);
     });
 
     
-    // Add a rotating cube in the center
-    const cubeEntity = new Entity('rotating-cube', V.vec4(0, 0, 0), undefined, V.vec4(10, 10, 10, 1), false);
+    const cubeEntity = new Entity('rotating-cube', vec4(0, 0, 0), undefined, vec4(10, 10, 10, 1), false);
     const cubeComponent = new MeshComponent(cubeMesh, true,"example-texture");
     cubeEntity.addComponent(cubeComponent);
     const rotator = new Rotator(1,{x:0,y:1,z:0});
