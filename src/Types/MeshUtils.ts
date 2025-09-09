@@ -187,3 +187,225 @@ export function generateCubeMesh(size: number) {
         indices: new Uint16Array(indices),
     };
 }
+
+/**
+ * Load a mesh from OBJ file content
+ * 
+ * Parses Wavefront OBJ format and creates a mesh compatible with the rendering pipeline.
+ * Supports vertices (v), normals (vn), texture coordinates (vt), and faces (f).
+ * Automatically triangulates quad faces and higher-order polygons.
+ * 
+ * @param objContent - The content of the .obj file as a string
+ * @returns A Mesh object compatible with the rendering pipeline (without id field)
+ * 
+ * @example
+ * ```typescript
+ * import { loadOBJ } from './Types/MeshUtils';
+ * import { loadOBJFile } from './misc/loadFiles';
+ * 
+ * // Load from string content
+ * const objContent = `
+ * v 0.0 0.0 0.0
+ * v 1.0 0.0 0.0
+ * v 0.5 1.0 0.0
+ * f 1 2 3
+ * `;
+ * const meshData = loadOBJ(objContent);
+ * const mesh = { id: 'my-obj-mesh', ...meshData };
+ * 
+ * // Use like any other mesh
+ * view.uploadMeshToGPU(mesh.id, mesh.vertices, mesh.normals, mesh.uvs, mesh.indices);
+ * const meshComponent = new MeshComponent(mesh, true, 'my-texture');
+ * 
+ * // Load from file (async)
+ * const objFileContent = await loadOBJFile('/models/my-model.obj');
+ * const meshFromFile = { id: 'loaded-mesh', ...loadOBJ(objFileContent) };
+ * ```
+ */
+export function loadOBJ(objContent: string): Omit<Mesh, 'id'> {
+    const lines = objContent.split('\n').map(line => line.trim()).filter(line => line && !line.startsWith('#'));
+    
+    const vertices: number[][] = [];
+    const normals: number[][] = [];
+    const uvs: number[][] = [];
+    const faces: Array<{vertex: number, uv?: number, normal?: number}[]> = [];
+    
+    // Parse OBJ file line by line
+    for (const line of lines) {
+        const parts = line.split(/\s+/);
+        const type = parts[0];
+        
+        switch (type) {
+            case 'v': // Vertex
+                if (parts.length >= 4) {
+                    vertices.push([parseFloat(parts[1]), parseFloat(parts[2]), parseFloat(parts[3])]);
+                }
+                break;
+                
+            case 'vn': // Vertex normal
+                if (parts.length >= 4) {
+                    normals.push([parseFloat(parts[1]), parseFloat(parts[2]), parseFloat(parts[3])]);
+                }
+                break;
+                
+            case 'vt': // Vertex texture coordinate
+                if (parts.length >= 3) {
+                    uvs.push([parseFloat(parts[1]), parseFloat(parts[2])]);
+                }
+                break;
+                
+            case 'f': // Face
+                if (parts.length >= 4) {
+                    const faceVertices: {vertex: number, uv?: number, normal?: number}[] = [];
+                    
+                    // Parse face vertices (support formats: v, v/vt, v/vt/vn, v//vn)
+                    for (let i = 1; i < parts.length; i++) {
+                        const vertexData = parts[i].split('/');
+                        const vertex = parseInt(vertexData[0]) - 1; // Convert to 0-based index
+                        const uv = vertexData[1] && vertexData[1] !== '' ? parseInt(vertexData[1]) - 1 : undefined;
+                        const normal = vertexData[2] && vertexData[2] !== '' ? parseInt(vertexData[2]) - 1 : undefined;
+                        
+                        faceVertices.push({ vertex, uv, normal });
+                    }
+                    
+                    // Triangulate face if it has more than 3 vertices (simple fan triangulation)
+                    for (let i = 1; i < faceVertices.length - 1; i++) {
+                        faces.push([faceVertices[0], faceVertices[i], faceVertices[i + 1]]);
+                    }
+                }
+                break;
+        }
+    }
+    
+    // Validate that we have at least some vertices and faces
+    if (vertices.length === 0) {
+        throw new Error('No vertices found in OBJ file');
+    }
+    if (faces.length === 0) {
+        throw new Error('No faces found in OBJ file');
+    }
+    
+    // Build output arrays
+    const outVertices: number[] = [];
+    const outNormals: number[] = [];
+    const outUVs: number[] = [];
+    const outIndices: number[] = [];
+    
+    // Create vertex index map to handle vertex/normal/uv combinations
+    const vertexMap = new Map<string, number>();
+    let nextIndex = 0;
+    
+    for (const face of faces) {
+        for (const faceVertex of face) {
+            const key = `${faceVertex.vertex}_${faceVertex.uv ?? -1}_${faceVertex.normal ?? -1}`;
+            
+            let index = vertexMap.get(key);
+            if (index === undefined) {
+                index = nextIndex++;
+                vertexMap.set(key, index);
+                
+                // Add vertex position
+                const vertex = vertices[faceVertex.vertex];
+                outVertices.push(vertex[0], vertex[1], vertex[2]);
+                
+                // Add UV coordinates (default to 0,0 if not specified)
+                if (faceVertex.uv !== undefined && uvs[faceVertex.uv]) {
+                    const uv = uvs[faceVertex.uv];
+                    outUVs.push(uv[0], uv[1]);
+                } else {
+                    outUVs.push(0, 0);
+                }
+                
+                // Add normal (compute if not specified)
+                if (faceVertex.normal !== undefined && normals[faceVertex.normal]) {
+                    const normal = normals[faceVertex.normal];
+                    outNormals.push(normal[0], normal[1], normal[2]);
+                } else {
+                    // For now, use a default normal (0, 0, 1) - in a real implementation,
+                    // we would compute face normals
+                    outNormals.push(0, 0, 1);
+                }
+            }
+            
+            outIndices.push(index);
+        }
+    }
+    
+    // If no normals were provided in the file, compute face normals
+    if (normals.length === 0) {
+        computeFaceNormals(outVertices, outIndices, outNormals);
+    }
+    
+    // Choose appropriate index array type
+    const indexArray = nextIndex > 0xffff ? new Uint32Array(outIndices) : new Uint16Array(outIndices);
+    
+    return {
+        vertices: new Float32Array(outVertices),
+        normals: new Float32Array(outNormals),
+        uvs: new Float32Array(outUVs),
+        indices: indexArray,
+    };
+}
+
+/**
+ * Compute face normals for triangular faces
+ */
+function computeFaceNormals(vertices: number[], indices: number[], normals: number[]): void {
+    // Initialize all normals to zero
+    for (let i = 0; i < normals.length; i++) {
+        normals[i] = 0;
+    }
+    
+    // Accumulate face normals to vertex normals
+    for (let i = 0; i < indices.length; i += 3) {
+        const i1 = indices[i] * 3;
+        const i2 = indices[i + 1] * 3;
+        const i3 = indices[i + 2] * 3;
+        
+        // Get triangle vertices
+        const v1 = [vertices[i1], vertices[i1 + 1], vertices[i1 + 2]];
+        const v2 = [vertices[i2], vertices[i2 + 1], vertices[i2 + 2]];
+        const v3 = [vertices[i3], vertices[i3 + 1], vertices[i3 + 2]];
+        
+        // Compute face normal using cross product
+        const edge1 = [v2[0] - v1[0], v2[1] - v1[1], v2[2] - v1[2]];
+        const edge2 = [v3[0] - v1[0], v3[1] - v1[1], v3[2] - v1[2]];
+        
+        const faceNormal = [
+            edge1[1] * edge2[2] - edge1[2] * edge2[1],
+            edge1[2] * edge2[0] - edge1[0] * edge2[2],
+            edge1[0] * edge2[1] - edge1[1] * edge2[0]
+        ];
+        
+        // Normalize face normal
+        const length = Math.sqrt(faceNormal[0] * faceNormal[0] + faceNormal[1] * faceNormal[1] + faceNormal[2] * faceNormal[2]);
+        if (length > 0) {
+            faceNormal[0] /= length;
+            faceNormal[1] /= length;
+            faceNormal[2] /= length;
+        }
+        
+        // Add face normal to all vertices of this face
+        normals[i1] += faceNormal[0];
+        normals[i1 + 1] += faceNormal[1];
+        normals[i1 + 2] += faceNormal[2];
+        
+        normals[i2] += faceNormal[0];
+        normals[i2 + 1] += faceNormal[1];
+        normals[i2 + 2] += faceNormal[2];
+        
+        normals[i3] += faceNormal[0];
+        normals[i3 + 1] += faceNormal[1];
+        normals[i3 + 2] += faceNormal[2];
+    }
+    
+    // Normalize all vertex normals
+    for (let i = 0; i < normals.length; i += 3) {
+        const length = Math.sqrt(normals[i] * normals[i] + normals[i + 1] * normals[i + 1] + normals[i + 2] * normals[i + 2]);
+        if (length > 0) {
+            normals[i] /= length;
+            normals[i + 1] /= length;
+            normals[i + 2] /= length;
+        }
+    }
+}

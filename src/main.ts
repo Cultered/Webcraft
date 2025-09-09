@@ -9,8 +9,10 @@ import {mat4Rotation} from './misc/mat4'
 import {vec4} from './misc/vec4';
 import Rotator from './Model/Components/Rotator';
 import exampleTextureUrl from './misc/lex.png';
-import { sphere3 } from './misc/misc';
+import { sphere2 } from './misc/misc';
 import { loadImageData } from './misc/loadFiles';
+import { loadOBJFile } from './misc/loadFiles';
+import { loadOBJ } from './Types/MeshUtils';
 
 (async () => {
     const view = await createView(o11s.USE_WEBGPU);
@@ -35,15 +37,18 @@ import { loadImageData } from './misc/loadFiles';
 
     const sphereMesh = { id: 'builtin-sphere', ...generateSphereMesh(3, 1) };
     const cubeMesh = { id: 'builtin-cube', ...generateCubeMesh(1) };
+    const monkeMesh = loadOBJ(await loadOBJFile('/monke.obj'));
+    
 
     view.uploadMeshToGPU(sphereMesh.id, sphereMesh.vertices, sphereMesh.normals, sphereMesh.uvs, sphereMesh.indices);
     view.uploadMeshToGPU(cubeMesh.id, cubeMesh.vertices, cubeMesh.normals, cubeMesh.uvs, cubeMesh.indices);
+    view.uploadMeshToGPU("monkeMesh", monkeMesh.vertices, monkeMesh.normals, monkeMesh.uvs, monkeMesh.indices);
     view.uploadMeshToGPU(LOD_MESH.id, LOD_MESH.vertices, LOD_MESH.normals, LOD_MESH.uvs, LOD_MESH.indices);
 
     const sphereComponent = new MeshComponent(sphereMesh, true, 'example-texture');
 
 
-    const points = sphere3(20, 6, 7);
+    const points = sphere2(20, 6, 7);
     points.forEach(([x, y, z], idx) => {
         const id = `torusTubeSphere-${idx}`;
         const ent = new Entity(id, vec4(x, y, z), undefined, vec4(3, 3, 3, 1), true);
@@ -53,7 +58,7 @@ import { loadImageData } from './misc/loadFiles';
 
     
     const cubeEntity = new Entity('rotating-cube', vec4(0, 0, 0), undefined, vec4(10, 10, 10, 1), false);
-    const cubeComponent = new MeshComponent(cubeMesh, true,"example-texture");
+    const cubeComponent = new MeshComponent({id:"monkeMesh",...monkeMesh}, true,"example-texture");
     cubeEntity.addComponent(cubeComponent);
     const rotator = new Rotator(1,{x:0,y:1,z:0});
     cubeEntity.addComponent(rotator);
