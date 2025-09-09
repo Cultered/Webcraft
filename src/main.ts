@@ -1,16 +1,15 @@
 import Controller from './Controller/Controller';
 import MeshComponent from './Model/Components/MeshComponent';
+import Rotator from './Model/Components/Rotator';
+import Freecam from './Model/Components/Freecam';
 import { Entity } from './Model/Entity';
 import { generateSphereMesh } from './Types/MeshUtils';
+import { loadOBJ } from './Types/MeshUtils';
 import { mat4Rotation } from './misc/mat4'
 import { vec4 } from './misc/vec4';
-import Rotator from './Model/Components/Rotator';
-import exampleTextureUrl from './misc/lex.png';
 import { sphere3 } from './misc/misc';
-import { loadImageData } from './misc/loadFiles';
-import { loadOBJFile } from './misc/loadFiles';
-import { loadOBJ } from './Types/MeshUtils';
-import Freecam from './Model/Components/Freecam';
+import { loadImageData, loadOBJFile } from './misc/loadFiles';
+import exampleTextureUrl from './misc/lex.png';
 
 (async () => {
     const c = new Controller('main-camera');

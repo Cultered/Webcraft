@@ -37,11 +37,11 @@ export class Entity {
         return this.components.get(key) as T | undefined;
     }
 
-    update(deltaMs?: number) {
+    update() {
         if (this.isStatic) return;
         const out: any[] = [];
         for (const c of this.components.values()) {
-            if (c.update) out.push(c.update(this, deltaMs));
+            if (c.update) out.push(c.update(this));
             else out.push(null);
         }
         return out;

@@ -107,14 +107,14 @@ export default class Model {
         }
     }
 
-    update(deltaMs: number) {
+    update() {
         // Only update non-static entities (static ones are guaranteed immobile/unchanging)
         for (const e of this.nonStaticEntities.values()) {
-            e.update(deltaMs);
+            e.update();
             if (o11s.CPU_CHUNKS) this.updateChunkAssignment(e);
         }
         for (const cam of this.cameras) {
-            cam.update(deltaMs);
+            cam.update();
         }
     }
 
