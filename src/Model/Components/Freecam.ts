@@ -3,6 +3,7 @@ import { vec4, vec4Add, vec4Neg, vec4Scale, forward, right, up } from '../../mis
 import * as M from '../../misc/mat4';
 import { Entity } from '../Entity';
 import type { Component } from './Component';
+import debug from '../../Debug/Debug';
 
 export default class Freecam implements Component {
   private keys: Set<string> = new Set();
@@ -36,8 +37,9 @@ export default class Freecam implements Component {
     if (!entity) return;
     const delta = (deltaMs ?? 0) / 1000;
     const speedBase = this.keys.has('shift') ? 30*this.lastSpeedBoost : 3;
-    if(this.keys.has("shift"))this.lastSpeedBoost*=1.5**delta
+    if(this.keys.has("shift"))this.lastSpeedBoost*=1.35*delta
     else this.lastSpeedBoost = 1
+    debug.log(this.lastSpeedBoost.toFixed(20))
     const forwardVec = vec4Scale(vec4(), forward(), speedBase * delta);
     const rightVec = vec4Scale(vec4(), right(), speedBase * delta);
     const upVec = vec4Scale(vec4(), up(), speedBase * delta);
