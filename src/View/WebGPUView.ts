@@ -270,7 +270,6 @@ export class WebGPUView extends BaseView {
             colorAttachments: [{
                 view: msaaView,
                 resolveTarget: swapView,
-                clearValue: this.clearValue as GPUColor,
                 loadOp: 'clear',
                 storeOp: 'store',
             }],

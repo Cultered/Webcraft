@@ -22,7 +22,6 @@ export abstract class BaseView {
     protected lastCameraKey?: string;
     protected camera: Entity = new Entity('default-camera', V.vec4(), M.mat4(), V.vec4(1, 1, 1, 1));
     protected canvas?: HTMLCanvasElement;
-    protected clearValue = { r: 0, g: 0., b: 0., a: 1. };
 
     /**
      * Initialize the rendering context

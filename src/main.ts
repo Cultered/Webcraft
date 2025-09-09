@@ -22,10 +22,8 @@ import Freecam from './Model/Components/Freecam';
     c.view.addTexture('example-texture', await loadImageData(exampleTextureUrl));
 
     const sphereMesh = { id: 'builtin-sphere', ...generateSphereMesh(3, 1) };
-    const monkeMesh = { id: "monkeMesh", ...loadOBJ(await loadOBJFile('/monke.obj')) };
 
     const sphereComponent = new MeshComponent(sphereMesh, 'example-texture');
-    const monkeComponent = new MeshComponent(monkeMesh, "example-texture");
 
 
     const points = sphere2(20, 6, 7);
@@ -38,7 +36,8 @@ import Freecam from './Model/Components/Freecam';
 
 
     const monke = new Entity('monke', vec4(0, 0, 0), undefined, vec4(10, 10, 10, 1), false);
-    monke.addComponent(monkeComponent);
+    const monkeMesh = { id: "monkeMesh", ...loadOBJ(await loadOBJFile('/monke.obj')) };
+    monke.addComponent(new MeshComponent(monkeMesh, "example-texture"));
     monke.addComponent(new Rotator(1, { x: 0, y: 1, z: 0 }));
     c.model.addEntity(monke);
 

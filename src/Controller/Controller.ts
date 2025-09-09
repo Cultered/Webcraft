@@ -3,6 +3,7 @@ import { createView } from '../View/View';
 import { BaseView } from '../View/BaseView';
 import debug from '../Debug/Debug';
 import { o11s } from '../config/config';
+import { setUpCanvas } from '../misc/setUpCanvas';
 
 export let DELTA_TIME = 0;
 
@@ -11,17 +12,19 @@ export default class Controller{
   public view!: BaseView;
   private camId: string;
   private lastTime: number = performance.now();
+  private canvasEl!: HTMLCanvasElement;
 
-  constructor(camId='main-camera') {
+
+  constructor(camId='main-camera',canvasEl?: HTMLCanvasElement) {
     this.camId = camId;
+    this.canvasEl = canvasEl || setUpCanvas();
   }
 
   async init() {
     this.model = new Model();
-    this.view = await createView(o11s.USE_WEBGPU);
-    const canvasEl = document.querySelector('#main-canvas') as HTMLCanvasElement;
-    canvasEl.addEventListener('click', () => {
-      canvasEl?.requestPointerLock?.();
+    this.view = await createView(o11s.USE_WEBGPU, this.canvasEl);
+    this.canvasEl.addEventListener('click', () => {
+      this.canvasEl.requestPointerLock?.();
     });
     requestAnimationFrame(this.controllerLoop);
   }

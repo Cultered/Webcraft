@@ -126,8 +126,25 @@ export class WebGLView extends BaseView {
         
         this.staticSceneObjects = staticObjects;
         this.nonStaticSceneObjects = nonStaticObjects;
+
         // For WebGL, we don't need to pre-upload matrices as we update them per draw call
         // The optimization here is that we know which objects are static vs dynamic for batching/sorting
+        // Additionally, ensure any meshes referenced by these entities are uploaded to the GPU.
+        const ensureMeshUploaded = (e: Entity) => {
+            const mc = e.getComponent(MeshComponent);
+            if (!mc) return;
+            const m = mc.mesh;
+            // If mesh not tracked yet, register it
+            if (!this.meshes[m.id]) {
+                this.meshes[m.id] = m;
+            }
+            // If buffers not yet created for this mesh, create them
+            if (!this.glVertexBuffers.has(m.id)) {
+                this.createWebGLBuffersForMesh(m.id);
+            }
+        };
+        for (const e of staticObjects) ensureMeshUploaded(e);
+        for (const e of nonStaticObjects) ensureMeshUploaded(e);
     }
 
     public registerCamera(camera: Entity): void {
@@ -165,10 +182,6 @@ export class WebGLView extends BaseView {
         }
 
         const gl = this.gl;
-
-        // Clear the canvas
-        gl.clearColor(this.clearValue.r, this.clearValue.g, this.clearValue.b, this.clearValue.a);
-        gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
 
         try {
             gl.useProgram(this.glProgram);
