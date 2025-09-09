@@ -40,7 +40,7 @@ describe('Textured Rendering', () => {
     });
     
     it('should create MeshComponent with texture property', () => {
-        const cubeMesh = generateCubeMesh(1);
+        const cubeMesh = {id:"test", ...generateCubeMesh(1)};
         const meshComponent = new MeshComponent(cubeMesh, false, 'test-texture');
         
         expect(meshComponent.mesh).toBe(cubeMesh);
@@ -48,7 +48,7 @@ describe('Textured Rendering', () => {
     });
     
     it('should use default primitive texture when no texture specified', () => {
-        const cubeMesh = generateCubeMesh(1);
+        const cubeMesh = {id:"test", ...generateCubeMesh(1)};
         const meshComponent = new MeshComponent(cubeMesh, false);
         
         expect(meshComponent.texture).toBe('primitive');
