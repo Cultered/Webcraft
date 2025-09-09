@@ -44,12 +44,13 @@ export class WebGPUView extends BaseView {
     private staticMeshBatches = new Map<string, { base: number; count: number; meshId: string; textureId: string }>();
     private nonStaticMeshBatches = new Map<string, { base: number; count: number; meshId: string; textureId: string }>();
     private nonStaticBaseOffset = 0;
-    private bindGroup?: GPUBindGroup;
     private objectStorageBuffer?: GPUBuffer;
     private cameraBuffer?: GPUBuffer;
     private projectionBuffer?: GPUBuffer;
     private textureSampler?: GPUSampler;
     private primitiveTexture?: GPUTexture;
+    private textures = new Map<string, GPUTexture>();
+    private bindGroups = new Map<string, GPUBindGroup>();
 
     // Added MSAA fields
     private msaaColorTexture?: GPUTexture;
@@ -137,15 +138,6 @@ export class WebGPUView extends BaseView {
                         { binding: 3, visibility: GPUShaderStage.FRAGMENT, sampler: {} },
                         { binding: 4, visibility: GPUShaderStage.FRAGMENT, texture: { sampleType: 'float' } },
                     ],
-                });
-                this.bindGroup = device.createBindGroup({
-                    layout: bindGroupLayout, entries: [
-                        { binding: 0, resource: { buffer: this.objectStorageBuffer! } },
-                        { binding: 1, resource: { buffer: this.cameraBuffer! } },
-                        { binding: 2, resource: { buffer: this.projectionBuffer! } },
-                        { binding: 3, resource: this.textureSampler! },
-                        { binding: 4, resource: this.primitiveTexture!.createView() },
-                    ]
                 });
 
                 const vertexBuffers = [
@@ -251,7 +243,7 @@ export class WebGPUView extends BaseView {
     }
 
     public render(): void {
-        if (!this.device || !this.context || !this.renderPipeline || !this.depthTexture || !this.bindGroup || !this.msaaColorTexture) {
+        if (!this.device || !this.context || !this.renderPipeline || !this.depthTexture || !this.msaaColorTexture) {
             console.warn('Render skipped: device/context/pipeline not ready');
             return;
         }
@@ -282,13 +274,16 @@ export class WebGPUView extends BaseView {
             passEncoder.setPipeline(this.renderPipeline);
 
             // Optimized rendering: draw static objects first, then non-static objects, grouped by mesh+texture
-            passEncoder.setBindGroup(0, this.bindGroup!);
             let objIndex = 0;
             // First, draw all static objects grouped by mesh+texture
             for (const [_, batch] of this.staticMeshBatches) {
                 const buf = this.objectBuffers.get(batch.meshId);
-                debug.log(buf ? "" : "No buffer for mesh " + batch.meshId);
                 if (!buf) continue;
+
+                // Get the appropriate bind group for this texture
+                const bindGroup = this.getBindGroupForTexture(batch.textureId);
+                passEncoder.setBindGroup(0, bindGroup);
+
                 passEncoder.setVertexBuffer(0, buf.vertexBuffer);
                 const indexFormat: GPUIndexFormat = buf.indices instanceof Uint16Array ? 'uint16' : 'uint32';
                 passEncoder.setIndexBuffer(buf.indexBuffer, indexFormat);
@@ -300,6 +295,11 @@ export class WebGPUView extends BaseView {
             for (const [_, batch] of this.nonStaticMeshBatches) {
                 const buf = this.objectBuffers.get(batch.meshId);
                 if (!buf) continue;
+
+                // Get the appropriate bind group for this texture
+                const bindGroup = this.getBindGroupForTexture(batch.textureId);
+                passEncoder.setBindGroup(0, bindGroup);
+
                 passEncoder.setVertexBuffer(0, buf.vertexBuffer);
                 const indexFormat: GPUIndexFormat = buf.indices instanceof Uint16Array ? 'uint16' : 'uint32';
                 passEncoder.setIndexBuffer(buf.indexBuffer, indexFormat);
@@ -383,15 +383,7 @@ export class WebGPUView extends BaseView {
         this.device.queue.writeBuffer(this.objectStorageBuffer!, 0, all.buffer, 0, all.byteLength);
 
         if (recreated) {
-            // rebuild bind group to reference the new buffer
-            const bindGroupLayout = this.renderPipeline!.getBindGroupLayout(0);
-            this.bindGroup = this.device.createBindGroup({ layout: bindGroupLayout, entries: [
-                { binding: 0, resource: { buffer: this.objectStorageBuffer! } },
-                { binding: 1, resource: { buffer: this.cameraBuffer! } },
-                { binding: 2, resource: { buffer: this.projectionBuffer! } },
-                { binding: 3, resource: this.textureSampler! },
-                { binding: 4, resource: this.primitiveTexture!.createView() },
-            ] });
+            // Note: Bind groups are now created dynamically in render() based on texture
         }
     }
 
@@ -403,15 +395,7 @@ export class WebGPUView extends BaseView {
             const all = this.buildBatchesAndMatrixBuffer(this.staticSceneObjects, nonStaticObjects);
             this.maxObjects = Math.max(this.maxObjects, (this.staticSceneObjects.length + nonStaticObjects.length));
             this.objectStorageBuffer = this.device.createBuffer({ size: 64 * this.maxObjects, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST });
-            // rebuild bind group
-            const bindGroupLayout = this.renderPipeline!.getBindGroupLayout(0);
-            this.bindGroup = this.device.createBindGroup({ layout: bindGroupLayout, entries: [
-                { binding: 0, resource: { buffer: this.objectStorageBuffer! } },
-                { binding: 1, resource: { buffer: this.cameraBuffer! } },
-                { binding: 2, resource: { buffer: this.projectionBuffer! } },
-                { binding: 3, resource: this.textureSampler! },
-                { binding: 4, resource: this.primitiveTexture!.createView() },
-            ] });
+            // Note: Bind groups are now created dynamically in render() based on texture
             this.device.queue.writeBuffer(this.objectStorageBuffer!, 0, all.buffer, 0, all.byteLength);
             return;
         }
@@ -553,6 +537,47 @@ export class WebGPUView extends BaseView {
     }
 
     /**
+     * Get or create a bind group for the specified texture
+     * @param textureId - The texture identifier
+     * @returns GPUBindGroup for the texture
+     */
+    private getBindGroupForTexture(textureId: string): GPUBindGroup {
+        if (!this.device || !this.renderPipeline) {
+            throw new Error('WebGPU device or pipeline not initialized');
+        }
+
+        // Check if we already have a bind group for this texture
+        if (this.bindGroups.has(textureId)) {
+            return this.bindGroups.get(textureId)!;
+        }
+
+        // Get the texture (use primitive texture as fallback)
+        const texture = this.textures.get(textureId) || this.primitiveTexture;
+        if (!texture) {
+            throw new Error(`Texture '${textureId}' not found and no primitive texture available`);
+        }
+
+        // Create bind group layout
+        const bindGroupLayout = this.renderPipeline.getBindGroupLayout(0);
+
+        // Create new bind group for this texture
+        const bindGroup = this.device.createBindGroup({
+            layout: bindGroupLayout,
+            entries: [
+                { binding: 0, resource: { buffer: this.objectStorageBuffer! } },
+                { binding: 1, resource: { buffer: this.cameraBuffer! } },
+                { binding: 2, resource: { buffer: this.projectionBuffer! } },
+                { binding: 3, resource: this.textureSampler! },
+                { binding: 4, resource: texture.createView() },
+            ]
+        });
+
+        // Cache the bind group
+        this.bindGroups.set(textureId, bindGroup);
+        return bindGroup;
+    }
+
+    /**
      * Create primitive texture for testing
      */
     private createPrimitiveTexture(): void {
@@ -578,5 +603,32 @@ export class WebGPUView extends BaseView {
             { bytesPerRow: 8, rowsPerImage: 2 },
             { width: 2, height: 2 }
         );
+    }
+
+    /**
+     * Upload texture from ImageData
+     * @param textureId - Unique identifier for the texture
+     * @param imageData - ImageData object containing the texture data
+     */
+    public uploadTextureFromImageData(textureId: string, imageData: ImageData): void {
+        if (!this.device) throw new Error('WebGPU device not initialized');
+
+        // Create texture with the dimensions from ImageData
+        const texture = this.device.createTexture({
+            size: { width: imageData.width, height: imageData.height },
+            format: 'rgba8unorm',
+            usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST,
+        });
+
+        // Write the ImageData to the texture
+        this.device.queue.writeTexture(
+            { texture },
+            imageData.data,
+            { bytesPerRow: imageData.width * 4, rowsPerImage: imageData.height },
+            { width: imageData.width, height: imageData.height }
+        );
+
+        // Store the texture
+        this.textures.set(textureId, texture);
     }
 }

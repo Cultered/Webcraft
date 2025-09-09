@@ -7,6 +7,10 @@ import { generateSphereMesh, generateCubeMesh, LOD_MESH } from './Types/MeshUtil
 import * as M from './misc/mat4'
 import * as V from './misc/vec4';
 import Rotator from './Model/Components/Rotator';
+// Added: import texture asset (Vite will turn this into a URL)
+import exampleTextureUrl from './misc/lex.png';
+import { torusTube } from './misc/misc';
+import { loadImageData } from './misc/loadFiles';
 
 (async () => {
     const view = await createView(o11s.USE_WEBGPU);
@@ -22,64 +26,25 @@ import Rotator from './Model/Components/Rotator';
         mainCam.addComponent(new Freecam(canvasEl));
     }
 
+    // Helper: load Image -> ImageData
+    
+
+    // Load & upload example texture (id: 'example-texture')
+    try {
+        const imageData = await loadImageData(exampleTextureUrl);
+        (view as any).uploadTextureFromImageData?.('example-texture', imageData);
+    } catch (e) { console.warn('Failed to load example texture', e); }
+
     const sphereMesh = { id: 'builtin-sphere', ...generateSphereMesh(3, 1) };
     const cubeMesh = { id: 'builtin-cube', ...generateCubeMesh(1) };
 
     view.uploadMeshToGPU(sphereMesh.id, sphereMesh.vertices, sphereMesh.normals, sphereMesh.uvs, sphereMesh.indices);
     view.uploadMeshToGPU(cubeMesh.id, cubeMesh.vertices, cubeMesh.normals, cubeMesh.uvs, cubeMesh.indices);
     view.uploadMeshToGPU(LOD_MESH.id, LOD_MESH.vertices, LOD_MESH.normals, LOD_MESH.uvs, LOD_MESH.indices);
-                const sphereComponent = new MeshComponent(sphereMesh, true);
 
-    // Torus tube algorithm (translated from Python)
-    function torusTube(R: number,R1:number, p: number, q: number, Nu: number, Nv: number): [number, number, number][] {
-        const points: [number, number, number][] = [];
-        let pk: number[] | null = null;
-        for (let j = -1; j <= Nv; j++) {
-            const v = 2 * Math.PI * j / (Nv + 1);
-            const r = Math.cos(q * v) + 2;
-            const old_pk = pk;
-            pk = [
-                R * r * Math.cos(p * v),
-                -R * Math.sin(q * v),
-                R * r * Math.sin(p * v)
-            ];
-            if (!old_pk) continue;
-            // nv = pk - old_pk
-            let nv = pk.map((val, idx) => val - old_pk[idx]);
-            const nvLen = Math.sqrt(nv.reduce((acc, val) => acc + val * val, 0));
-            nv = nv.map(val => val / nvLen);
-            // iv: random orthogonal vector
-            let iv = [Math.random(), Math.random(), Math.random()];
-            const dot = iv[0]*nv[0] + iv[1]*nv[1] + iv[2]*nv[2];
-            iv = iv.map((val, idx) => val - dot * nv[idx]);
-            const ivLen = Math.sqrt(iv.reduce((acc, val) => acc + val * val, 0));
-            iv = iv.map(val => val / ivLen);
-            // jv = cross(nv, iv)
-            let jv = [
-                nv[1]*iv[2] - nv[2]*iv[1],
-                nv[2]*iv[0] - nv[0]*iv[2],
-                nv[0]*iv[1] - nv[1]*iv[0]
-            ];
-            const jvLen = Math.sqrt(jv.reduce((acc, val) => acc + val * val, 0));
-            jv = jv.map(val => val / jvLen);
-            for (let i = 0; i <= Nu; i++) {
-                const u = -Math.PI + 2 * Math.PI * i / (Nu + 1);
-                const ea = [
-                    R1 * (Math.cos(u) * iv[0] + Math.sin(u) * jv[0]),
-                    R1 * (Math.cos(u) * iv[1] + Math.sin(u) * jv[1]),
-                    R1 * (Math.cos(u) * iv[2] + Math.sin(u) * jv[2])
-                ];
-                const x = ea[0] + pk[0];
-                const y = ea[1] + pk[1];
-                const z = ea[2] + pk[2];
-                // Avoid duplicates
-                if (!points.some(pt => pt[0] === x && pt[1] === y && pt[2] === z)) {
-                    points.push([x, y, z]);
-                }
-            }
-        }
-        return points;
-    }
+    // Use texture on all sphere instances
+    const sphereComponent = new MeshComponent(sphereMesh, true, 'example-texture');
+
 
     // Use common defaults
     const R = 500, r = 70, p = 16, q = 17, Nu = 20, Nv = 1000;

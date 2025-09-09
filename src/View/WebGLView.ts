@@ -384,4 +384,19 @@ export class WebGLView extends BaseView {
         ]);
         this.createTexture('primitive', 2, 2, textureData);
     }
+
+    /**
+     * Upload texture from ImageData
+     * @param textureId - Unique identifier for the texture
+     * @param imageData - ImageData object containing the texture data
+     */
+    public uploadTextureFromImageData(textureId: string, imageData: ImageData): void {
+        if (!this.gl) throw new Error('WebGL context not initialized');
+
+        // Convert Uint8ClampedArray to Uint8Array for compatibility
+        const textureData = new Uint8Array(imageData.data);
+
+        // Use the existing createTexture method with the converted data
+        this.createTexture(textureId, imageData.width, imageData.height, textureData);
+    }
 }
