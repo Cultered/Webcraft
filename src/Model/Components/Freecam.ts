@@ -4,6 +4,7 @@ import * as M from '../../misc/mat4';
 import { Entity } from '../Entity';
 import type { Component } from './Component';
 import debug from '../../Debug/Debug';
+import { DELTA_TIME } from '../../Controller/Controller';
 
 export default class Freecam implements Component {
   private keys: Set<string> = new Set();
@@ -37,9 +38,9 @@ export default class Freecam implements Component {
     });
   }
 
-  update(entity: Entity, deltaMs?: number) {
+  update(entity: Entity) {
     if (!entity) return;
-    const delta = (deltaMs ?? 0) / 1000;
+    const delta = (DELTA_TIME ?? 0) / 1000;
     const speedBase = this.keys.has('shift') ? 30*this.lastSpeedBoost : 3;
     if(this.keys.has("shift"))this.lastSpeedBoost*=1.35**delta
     else this.lastSpeedBoost = 1

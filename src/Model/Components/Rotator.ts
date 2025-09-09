@@ -1,6 +1,7 @@
 import type { Component } from './Component';
 import { Entity } from '../Entity';
 import * as M from '../../misc/mat4';
+import { DELTA_TIME } from '../../Controller/Controller';
 
 export class Rotator implements Component {
     speed: number;
@@ -9,8 +10,8 @@ export class Rotator implements Component {
         this.speed = speed;
         this.axis = axis;
     }
-    update(entity: Entity, deltaMs?: number) {
-        const seconds = (deltaMs ?? 16) / 1000;
+    update(entity: Entity) {
+        const seconds = (DELTA_TIME ?? 16) / 1000;
         const rot = M.mat4Rotation(this.axis.x * this.speed * seconds, this.axis.y * this.speed * seconds, this.axis.z * this.speed * seconds);
         entity.rotation = M.mat4Mul(M.mat4(), rot, entity.rotation);
         return entity.rotation;
