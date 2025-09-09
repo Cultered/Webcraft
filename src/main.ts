@@ -1,4 +1,5 @@
-import { o11s } from './config/config';import { createView } from './View/View';
+import { o11s } from './config/config';
+import { createView } from './View/View';
 import Model from './Model/Model';
 import Controller from './Controller/Controller';
 import MeshComponent from './Model/Components/MeshComponent';
@@ -9,7 +10,7 @@ import * as V from './misc/vec4';
 import Rotator from './Model/Components/Rotator';
 // Added: import texture asset (Vite will turn this into a URL)
 import exampleTextureUrl from './misc/lex.png';
-import { torusTube } from './misc/misc';
+import { sphere2 } from './misc/misc';
 import { loadImageData } from './misc/loadFiles';
 
 (async () => {
@@ -46,9 +47,7 @@ import { loadImageData } from './misc/loadFiles';
     const sphereComponent = new MeshComponent(sphereMesh, true, 'example-texture');
 
 
-    // Use common defaults
-    const R = 500, r = 70, p = 16, q = 17, Nu = 20, Nv = 1000;
-    const tubePoints = torusTube(R, r, p, q, Nu, Nv);
+    const tubePoints = sphere2(1000, 10, 20, 100, 10, 10);
     tubePoints.forEach(([x, y, z], idx) => {
         const id = `torusTubeSphere-${idx}`;
         const ent = new Entity(id, V.vec4(x, y, z), undefined, V.vec4(5, 5, 5, 1), true);
@@ -59,7 +58,7 @@ import { loadImageData } from './misc/loadFiles';
     
     // Add a rotating cube in the center
     const cubeEntity = new Entity('rotating-cube', V.vec4(0, 0, 0), undefined, V.vec4(10, 10, 10, 1), false);
-    const cubeComponent = new MeshComponent(cubeMesh, true);
+    const cubeComponent = new MeshComponent(cubeMesh, true,"example-texture");
     cubeEntity.addComponent(cubeComponent);
     const rotator = new Rotator(1,{x:0,y:1,z:0});
     cubeEntity.addComponent(rotator);
