@@ -1,6 +1,5 @@
 import { BaseView } from './BaseView';
 import { vertexShader, fragmentShader } from './shaders/default-glsl-renderer';
-import type { Mesh } from '../Types/MeshType';
 import Entity from '../Model/Entity';
 import * as M from '../misc/mat4';
 import MeshComponent from '../Model/Components/MeshComponent';
@@ -155,13 +154,6 @@ export class WebGLView extends BaseView {
         }
         this.camera = camera;
         this.lastCameraKey = camKey;
-    }
-
-    public uploadMeshes(meshes: { [id: string]: Mesh }): void {
-        for (const k of Object.keys(meshes)) this.meshes[k] = meshes[k];
-        if (this.gl) {
-            for (const k of Object.keys(meshes)) this.createWebGLBuffersForMesh(k);
-        }
     }
 
     public uploadMeshToGPU(meshId: string, vertices: Float32Array, normals: Float32Array, uvs: Float32Array, indices: Uint32Array | Uint16Array): void {

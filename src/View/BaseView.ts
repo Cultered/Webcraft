@@ -50,7 +50,6 @@ export abstract class BaseView {
     /**
      * Upload meshes to the GPU
      */
-    public abstract uploadMeshes(meshes: { [id: string]: Mesh }): void;
 
     /**
      * Upload a single mesh to GPU

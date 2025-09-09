@@ -1,6 +1,5 @@
 import { BaseView } from './BaseView';
 import { renderer } from './shaders/default-wgsl-renderer';
-import type { Mesh } from '../Types/MeshType';
 import { ShowWebGPUInstructions } from '../misc/misc';
 import * as M from '../misc/mat4';
 import debug from '../Debug/Debug';
@@ -141,14 +140,14 @@ export class WebGPUView extends BaseView {
                 });
 
                 const vertexBuffers = [
-                    { 
+                    {
                         attributes: [
                             { shaderLocation: 0, offset: 0, format: 'float32x3' },  // position
                             { shaderLocation: 1, offset: 12, format: 'float32x3' }, // normal (12 bytes after position)
                             { shaderLocation: 2, offset: 24, format: 'float32x2' }  // uv (24 bytes after position + normal)
-                        ], 
+                        ],
                         arrayStride: 32,  // 8 floats * 4 bytes = 32 bytes per vertex (position + normal + uv)
-                        stepMode: 'vertex' 
+                        stepMode: 'vertex'
                     }
                 ];
 
@@ -166,8 +165,10 @@ export class WebGPUView extends BaseView {
 
                 const resizeCanvasAndDepthTexture = () => {
                     if (!this.canvas || !this.device) return;
-                    this.canvas.width = window.innerWidth;
-                    this.canvas.height = window.innerHeight;
+                    const dpr = window.devicePixelRatio || 1;
+                    this.canvas.width = Math.floor((this.canvas.clientWidth || window.innerWidth) * dpr);
+                    this.canvas.height = Math.floor((this.canvas.clientHeight || window.innerHeight) * dpr);
+
                     // recreate msaa and depth attachments sized to the new canvas
                     makeAttachments();
                     if (this.projectionBuffer) {
@@ -244,13 +245,6 @@ export class WebGPUView extends BaseView {
         }
     }
 
-    public uploadMeshes(meshes: { [id: string]: Mesh }): void {
-        for (const k of Object.keys(meshes)) this.meshes[k] = meshes[k];
-        if (this.device) {
-            for (const k of Object.keys(meshes)) this.createBuffersForMesh(k);
-        }
-    }
-
     public uploadMeshToGPU(meshId: string, vertices: Float32Array, normals: Float32Array, uvs: Float32Array, indices: Uint32Array | Uint16Array): void {
         this.meshes[meshId] = { id: meshId, vertices, normals, uvs, indices };
         if (this.device) this.createBuffersForMesh(meshId);
@@ -303,7 +297,7 @@ export class WebGPUView extends BaseView {
                 passEncoder.drawIndexed(buf.indices.length, batch.count, 0, 0, batch.base);
                 objIndex += batch.count;
             }
-            
+
             // Then, draw all non-static objects grouped by mesh+texture
             for (const [_, batch] of this.nonStaticMeshBatches) {
                 const buf = this.objectBuffers.get(batch.meshId);
@@ -334,48 +328,48 @@ export class WebGPUView extends BaseView {
         if (this.objectBuffers.has(meshId)) return;
         const mesh = this.meshes[meshId];
         if (!mesh) return;
-        
+
         const vertices = mesh.vertices;
         const normals = mesh.normals;
         const uvs = mesh.uvs;
         const indices = mesh.indices;
-        
+
         // Interleave vertices, normals, and UVs: [x, y, z, nx, ny, nz, u, v, x, y, z, nx, ny, nz, u, v, ...]
         const vertexCount = vertices.length / 3;
         const interleavedData = new Float32Array(vertexCount * 8); // 3 for position + 3 for normal + 2 for UV
-        
+
         for (let i = 0; i < vertexCount; i++) {
             const baseIdx = i * 8;
             const vertIdx = i * 3;
             const uvIdx = i * 2;
-            
+
             // Copy position
             interleavedData[baseIdx + 0] = vertices[vertIdx + 0];
             interleavedData[baseIdx + 1] = vertices[vertIdx + 1];
             interleavedData[baseIdx + 2] = vertices[vertIdx + 2];
-            
+
             // Copy normal
             interleavedData[baseIdx + 3] = normals[vertIdx + 0];
             interleavedData[baseIdx + 4] = normals[vertIdx + 1];
             interleavedData[baseIdx + 5] = normals[vertIdx + 2];
-            
+
             // Copy UV
             interleavedData[baseIdx + 6] = uvs[uvIdx + 0];
             interleavedData[baseIdx + 7] = uvs[uvIdx + 1];
         }
-        
-        const vertexBuffer = this.device.createBuffer({ 
-            size: interleavedData.byteLength, 
-            usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST 
+
+        const vertexBuffer = this.device.createBuffer({
+            size: interleavedData.byteLength,
+            usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST
         });
         this.device.queue.writeBuffer(vertexBuffer, 0, interleavedData.buffer);
-        
-        const indexBuffer = this.device.createBuffer({ 
-            size: indices.byteLength, 
-            usage: GPUBufferUsage.INDEX | GPUBufferUsage.COPY_DST 
+
+        const indexBuffer = this.device.createBuffer({
+            size: indices.byteLength,
+            usage: GPUBufferUsage.INDEX | GPUBufferUsage.COPY_DST
         });
         this.device.queue.writeBuffer(indexBuffer, 0, indices.buffer as ArrayBuffer, indices.byteOffset, indices.byteLength);
-        
+
         this.objectBuffers.set(meshId, { vertexBuffer, indexBuffer, indices });
     }
 
@@ -419,7 +413,7 @@ export class WebGPUView extends BaseView {
             const offsetBytes = this.nonStaticBaseOffset * 16 * 4; // offset in bytes (16 floats * 4 bytes per float)
             this.device.queue.writeBuffer(this.objectStorageBuffer!, offsetBytes, nonStaticMatrixBuffer.buffer, 0, nonStaticMatrixBuffer.byteLength);
         }
-        
+
         // Update batch information for non-static objects
         this.updateNonStaticBatches(nonStaticObjects);
     }
@@ -428,7 +422,7 @@ export class WebGPUView extends BaseView {
         // Group objects by mesh+texture, keeping static and non-static separate
         const staticGroups = new Map<string, Entity[]>();
         const nonStaticGroups = new Map<string, Entity[]>();
-        
+
         const pushStatic = (o: Entity) => {
             const meshComponent = o.getComponent(MeshComponent);
             if (!meshComponent) return;
@@ -436,7 +430,7 @@ export class WebGPUView extends BaseView {
             if (!staticGroups.has(id)) staticGroups.set(id, []);
             staticGroups.get(id)!.push(o);
         };
-        
+
         const pushNonStatic = (o: Entity) => {
             const meshComponent = o.getComponent(MeshComponent);
             if (!meshComponent) return;
@@ -444,7 +438,7 @@ export class WebGPUView extends BaseView {
             if (!nonStaticGroups.has(id)) nonStaticGroups.set(id, []);
             nonStaticGroups.get(id)!.push(o);
         };
-        
+
         staticObjs.forEach(pushStatic);
         nonStaticObjs.forEach(pushNonStatic);
 
@@ -452,15 +446,15 @@ export class WebGPUView extends BaseView {
         const out = new Float32Array(total * 16);
         this.staticMeshBatches.clear();
         this.nonStaticMeshBatches.clear();
-        
+
         let cursor = 0;
-        
+
         // First, add all static objects grouped by mesh+texture
         for (const [meshTextureId, arr] of staticGroups) {
             const firstMC = arr[0].getComponent(MeshComponent)!;
             const batch = { base: cursor, count: arr.length, meshId: firstMC.mesh.id, textureId: firstMC.texture };
             this.staticMeshBatches.set(meshTextureId, batch);
-            
+
             for (let i = 0; i < arr.length; i++) {
                 const o = arr[i];
                 const t = [o.position[0], o.position[1], o.position[2]];
@@ -470,14 +464,14 @@ export class WebGPUView extends BaseView {
             }
             cursor += arr.length;
         }
-        
+
         // Then, add all non-static objects grouped by mesh+texture
         this.nonStaticBaseOffset = cursor;
         for (const [meshTextureId, arr] of nonStaticGroups) {
             const firstMC = arr[0].getComponent(MeshComponent)!;
             const batch = { base: cursor, count: arr.length, meshId: firstMC.mesh.id, textureId: firstMC.texture };
             this.nonStaticMeshBatches.set(meshTextureId, batch);
-            
+
             for (let i = 0; i < arr.length; i++) {
                 const o = arr[i];
                 const t = [o.position[0], o.position[1], o.position[2]];
@@ -487,15 +481,15 @@ export class WebGPUView extends BaseView {
             }
             cursor += arr.length;
         }
-        
-        
+
+
         return out;
     }
 
     private buildNonStaticMatrixBuffer(nonStaticObjs: Entity[]): Float32Array {
         // Group non-static objects by mesh+texture
         const nonStaticGroups = new Map<string, Entity[]>();
-        
+
         const pushNonStatic = (o: Entity) => {
             const meshComponent = o.getComponent(MeshComponent);
             if (!meshComponent) return;
@@ -503,12 +497,12 @@ export class WebGPUView extends BaseView {
             if (!nonStaticGroups.has(id)) nonStaticGroups.set(id, []);
             nonStaticGroups.get(id)!.push(o);
         };
-        
+
         nonStaticObjs.forEach(pushNonStatic);
-        
+
         const out = new Float32Array(nonStaticObjs.length * 16);
         let cursor = 0;
-        
+
         // Process in same order as buildBatchesAndMatrixBuffer
         for (const [, arr] of nonStaticGroups) {
             for (let i = 0; i < arr.length; i++) {
@@ -520,14 +514,14 @@ export class WebGPUView extends BaseView {
             }
             cursor += arr.length;
         }
-        
+
         return out;
     }
 
     private updateNonStaticBatches(nonStaticObjs: Entity[]): void {
         // Group non-static objects by mesh+texture and update batch information
         const nonStaticGroups = new Map<string, Entity[]>();
-        
+
         const pushNonStatic = (o: Entity) => {
             const meshComponent = o.getComponent(MeshComponent);
             if (!meshComponent) return;
@@ -535,18 +529,18 @@ export class WebGPUView extends BaseView {
             if (!nonStaticGroups.has(id)) nonStaticGroups.set(id, []);
             nonStaticGroups.get(id)!.push(o);
         };
-        
+
         nonStaticObjs.forEach(pushNonStatic);
-        
+
         this.nonStaticMeshBatches.clear();
         let cursor = this.nonStaticBaseOffset;
-        
+
         for (const [meshTextureId, arr] of nonStaticGroups) {
             const firstMC = arr[0].getComponent(MeshComponent)!;
             this.nonStaticMeshBatches.set(meshTextureId, { base: cursor, count: arr.length, meshId: firstMC.mesh.id, textureId: firstMC.texture });
             cursor += arr.length;
         }
-        
+
     }
 
     /**
@@ -599,9 +593,9 @@ export class WebGPUView extends BaseView {
         // Create a simple 2x2 texture
         const textureData = new Uint8Array([
             // Top row: white, red
-            255, 255, 255, 255,   255, 0, 0, 255,
+            255, 255, 255, 255, 255, 0, 0, 255,
             // Bottom row: green, blue  
-            0, 255, 0, 255,       0, 0, 255, 255
+            0, 255, 0, 255, 0, 0, 255, 255
         ]);
 
         this.primitiveTexture = this.device.createTexture({
