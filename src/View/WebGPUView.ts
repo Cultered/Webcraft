@@ -624,7 +624,7 @@ export class WebGPUView extends BaseView {
      * @param textureId - Unique identifier for the texture
      * @param imageData - ImageData object containing the texture data
      */
-    public uploadTextureFromImageData(textureId: string, imageData: ImageData): void {
+    public addTexture(textureId: string, imageData: ImageData): void {
         if (!this.device) throw new Error('WebGPU device not initialized');
 
         // Create texture with the dimensions from ImageData
