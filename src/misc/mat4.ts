@@ -1,5 +1,7 @@
 import type { Vector4 } from "../Types/Vector4";
 import type { Matrix4x4 } from "../Types/Matrix4x4";
+import type { Quaternion } from "../Types/Quaternion";
+import { quatToMat4 } from "./quat";
 
 export function mat4(
   m00 = 1, m01 = 0, m02 = 0, m03 = 0,
@@ -241,14 +243,24 @@ export function mat4Transpose(m: Matrix4x4): Matrix4x4 {
 
 export function mat4TRS(
   translation: number[],
-  rotation: Matrix4x4,
+  rotation: Matrix4x4 | Quaternion,
   scale: number[]
 ): Matrix4x4 {
   const out = new Float32Array(16);
   const t = mat4Translation(translation[0], translation[1], translation[2]);
   const s = mat4Scale(scale[0], scale[1], scale[2]);
   const tmp = mat4();
-  mat4Mul(tmp, rotation, s);
+  
+  // Check if rotation is a quaternion (length 4) or matrix (length 16)
+  let rotMatrix: Matrix4x4;
+  if (rotation.length === 4) {
+    // It's a quaternion, convert to matrix
+    rotMatrix = quatToMat4(rotation as Quaternion);
+  } else {
+    rotMatrix = rotation as Matrix4x4;
+  }
+  
+  mat4Mul(tmp, rotMatrix, s);
   mat4Mul(out, t, tmp);
   return out;
 }

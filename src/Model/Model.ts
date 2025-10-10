@@ -1,7 +1,7 @@
 import type { Vector4 } from '../Types/Vector4';
-import type { Matrix4x4 } from '../Types/Matrix4x4';
+import type { Quaternion } from '../Types/Quaternion';
 import * as V from '../misc/vec4';
-import * as M from '../misc/mat4';
+import * as Q from '../misc/quat';
 import { Entity } from './Entity';
 import { o11s } from '../config/config';
 
@@ -32,8 +32,8 @@ export default class Model {
         return ent;
     }
 
-    addCamera(id: string, position?: Vector4, rotation?: Matrix4x4) {
-        const cam = new Entity(id, position ?? V.vec4(0, 0, 0, 0), rotation ?? M.mat4Identity(), V.vec4(1, 1, 1, 1));
+    addCamera(id: string, position?: Vector4, rotation?: Quaternion) {
+        const cam = new Entity(id, position ?? V.vec4(0, 0, 0, 0), rotation ?? Q.quatIdentity(), V.vec4(1, 1, 1, 1));
         this.cameras.push(cam);
         return cam;
     }
@@ -43,10 +43,10 @@ export default class Model {
         return this.cameras.find(camera => camera.id === id);
     }
 
-    requestInverseRotation(ent: Entity): Matrix4x4 {
+    requestInverseRotation(ent: Entity): Quaternion {
         let newInverse = ent.inverseRotation
         if (ent.updateInverseRotation || !newInverse) {
-            newInverse = M.mat4Inverse(M.mat4(), ent.rotation)
+            newInverse = Q.quatConjugate(Q.quat(), ent.rotation)
             ent.inverseRotation = newInverse
             ent.updateInverseRotation = false
         }

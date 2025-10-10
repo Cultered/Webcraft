@@ -1,6 +1,6 @@
 import type { Vector4 } from '../Types/Vector4';
-import type { Matrix4x4 } from '../Types/Matrix4x4';
-import * as M from '../misc/mat4';
+import type { Quaternion } from '../Types/Quaternion';
+import * as Q from '../misc/quat';
 import type { Component } from './Components/Component';
 import { vec4 } from '../misc/vec4';
 
@@ -8,8 +8,8 @@ import { vec4 } from '../misc/vec4';
 export class Entity {
     id: string;
     position: Vector4;
-    rotation: Matrix4x4;
-    inverseRotation?: Matrix4x4;
+    rotation: Quaternion;
+    inverseRotation?: Quaternion;
     updateInverseRotation: boolean = true; // if true, inverse rotation will be recalculated on next request
     scale: Vector4;
     isStatic: boolean = false;
@@ -17,10 +17,10 @@ export class Entity {
     components: Map<string, Component> = new Map();
     chunkKey?: string;
 
-    constructor(id: string, position?: Vector4, rotation?: Matrix4x4, scale?: Vector4, isStatic: boolean = false) {
+    constructor(id: string, position?: Vector4, rotation?: Quaternion, scale?: Vector4, isStatic: boolean = false) {
         this.id = id;
         this.position = position ?? vec4(0, 0, 0, 1);
-        this.rotation = rotation ?? M.mat4Identity();
+        this.rotation = rotation ?? Q.quatIdentity();
         this.scale = scale ?? vec4(1, 1, 1, 1);
         this.isStatic = isStatic;
     }
@@ -48,10 +48,10 @@ export class Entity {
     }
     requestInverseRotation = () => {
         if (this) {
-            this.inverseRotation = M.mat4Inverse(M.mat4(), this.rotation);
+            this.inverseRotation = Q.quatConjugate(Q.quat(), this.rotation);
             this.updateInverseRotation = false;
         }
-        return this.inverseRotation ?? M.mat4Identity();
+        return this.inverseRotation ?? Q.quatIdentity();
     }
 }
 

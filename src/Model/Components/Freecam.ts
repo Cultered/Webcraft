@@ -1,6 +1,6 @@
 
 import { vec4, vec4Add, vec4Neg, vec4Scale, forward, right, up } from '../../misc/vec4';
-import * as M from '../../misc/mat4';
+import * as Q from '../../misc/quat';
 import { Entity } from '../Entity';
 import type { Component } from './Component';
 import debug from '../../Debug/Debug';
@@ -52,27 +52,27 @@ export default class Freecam implements Component {
     const left = vec4Neg(vec4(), rightVec);
     const down = vec4Neg(vec4(), upVec);
     if (this.keys.has('w')) {
-      const dir = M.mat4MulVec4(vec4(), entity.requestInverseRotation(), backward);
+      const dir = Q.quatRotateVec4(vec4(), entity.requestInverseRotation(), backward);
       entity.position = vec4Add(vec4(), entity.position, dir);
     }
     if (this.keys.has('s')) {
-      const dir = M.mat4MulVec4(vec4(), entity.requestInverseRotation(), forwardVec);
+      const dir = Q.quatRotateVec4(vec4(), entity.requestInverseRotation(), forwardVec);
       entity.position = vec4Add(vec4(), entity.position, dir);
     }
     if (this.keys.has('a')) {
-      const dir = M.mat4MulVec4(vec4(), entity.requestInverseRotation(), left);
+      const dir = Q.quatRotateVec4(vec4(), entity.requestInverseRotation(), left);
       entity.position = vec4Add(vec4(), entity.position, dir);
     }
     if (this.keys.has('d')) {
-      const dir = M.mat4MulVec4(vec4(), entity.requestInverseRotation(), rightVec);
+      const dir = Q.quatRotateVec4(vec4(), entity.requestInverseRotation(), rightVec);
       entity.position = vec4Add(vec4(), entity.position, dir);
     }
     if (this.keys.has(' ')) {
-      const dir = M.mat4MulVec4(vec4(), entity.requestInverseRotation(), upVec);
+      const dir = Q.quatRotateVec4(vec4(), entity.requestInverseRotation(), upVec);
       entity.position = vec4Add(vec4(), entity.position, dir);
     }
     if (this.keys.has('control')) {
-      const dir = M.mat4MulVec4(vec4(), entity.requestInverseRotation(), down);
+      const dir = Q.quatRotateVec4(vec4(), entity.requestInverseRotation(), down);
       entity.position = vec4Add(vec4(), entity.position, dir);
     }
   }
@@ -89,10 +89,12 @@ export default class Freecam implements Component {
     if (!this.entity) return;
     const dy = e.movementY * this.mouseSensitivity;
     const dx = e.movementX * this.mouseSensitivity;
-    const ry = M.mat4Rotation(0, dx, 0);
-    const rx = M.mat4Rotation(dy, 0, 0);
-    this.entity.rotation = M.mat4Mul(M.mat4(), ry, this.entity.rotation);
-    this.entity.rotation = M.mat4Mul(M.mat4(), rx, this.entity.rotation);
+    
+    const ry = Q.quatFromEuler(0, dx, 0);
+    const rx = Q.quatFromEuler(dy, 0, 0);
+    
+    this.entity.rotation = Q.quatMul(Q.quat(), ry, this.entity.rotation);
+    this.entity.rotation = Q.quatMul(Q.quat(), rx, this.entity.rotation);
     this.entity.updateInverseRotation = true;
   };
 }
