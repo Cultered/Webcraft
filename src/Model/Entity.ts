@@ -16,6 +16,9 @@ export class Entity {
     // components keyed by constructor name for fast lookup
     components: Map<string, Component> = new Map();
     chunkKey?: string;
+    // Euler angle caching
+    private eulerAngles?: [number, number, number];
+    private previousRotation?: Matrix4x4;
 
     constructor(id: string, position?: Vector4, rotation?: Matrix4x4, scale?: Vector4, isStatic: boolean = false) {
         this.id = id;
@@ -52,6 +55,59 @@ export class Entity {
             this.updateInverseRotation = false;
         }
         return this.inverseRotation ?? M.mat4Identity();
+    }
+
+    /**
+     * Get Euler angles (in radians) from the entity's rotation matrix.
+     * Uses ZYX order. Returns cached values unless rotation has changed.
+     * @returns [x, y, z] euler angles in radians
+     */
+    getEuler(): [number, number, number] {
+        // Check if rotation has changed by comparing with previous rotation
+        if (!this.eulerAngles || !this.previousRotation || !this.rotationsEqual(this.rotation, this.previousRotation)) {
+            // Recalculate Euler angles
+            this.eulerAngles = M.mat4GetEulerZYX(this.rotation);
+            // Store a copy of current rotation for future comparison
+            this.previousRotation = new Float32Array(this.rotation);
+        }
+        return this.eulerAngles;
+    }
+
+    /**
+     * Set the entity's rotation from Euler angles (in radians) using ZYX order.
+     * @param x rotation around X axis in radians
+     * @param y rotation around Y axis in radians
+     * @param z rotation around Z axis in radians
+     */
+    setEuler(x: number, y: number, z: number): void {
+        this.rotation = M.mat4Rotation(x, y, z);
+        this.updateInverseRotation = true;
+        // Update cached values
+        this.eulerAngles = [x, y, z];
+        this.previousRotation = new Float32Array(this.rotation);
+    }
+
+    /**
+     * Rotate the entity by the given Euler angles (in radians) using ZYX order.
+     * @param x rotation delta around X axis in radians
+     * @param y rotation delta around Y axis in radians
+     * @param z rotation delta around Z axis in radians
+     */
+    rotateEuler(x: number, y: number, z: number): void {
+        const current = this.getEuler();
+        this.setEuler(current[0] + x, current[1] + y, current[2] + z);
+    }
+
+    /**
+     * Helper method to check if two rotation matrices are equal
+     */
+    private rotationsEqual(a: Matrix4x4, b: Matrix4x4): boolean {
+        for (let i = 0; i < 16; i++) {
+            if (Math.abs(a[i] - b[i]) > 1e-9) {
+                return false;
+            }
+        }
+        return true;
     }
 }
 

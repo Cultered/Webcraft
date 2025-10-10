@@ -263,3 +263,34 @@ export function mat4Projection(fovY: number, aspect: number, near: number, far: 
     0, 0, -1, 0
   );
 }
+
+/**
+ * Extract Euler angles (in radians) from a rotation matrix using ZYX order.
+ * Returns [x, y, z] where the rotation is applied as Z * Y * X.
+ */
+export function mat4GetEulerZYX(m: Matrix4x4): [number, number, number] {
+  // For ZYX order: R = Rz * Ry * Rx
+  // The matrix elements give us:
+  // m[8] = -sin(y)
+  // m[9] = cos(y) * sin(x)
+  // m[10] = cos(y) * cos(x)
+  // m[0] = cos(y) * cos(z)
+  // m[4] = cos(y) * sin(z)
+  
+  const sy = -m[8];
+  
+  // Check for gimbal lock
+  if (Math.abs(sy) >= 0.99999) {
+    // Gimbal lock case
+    const x = Math.atan2(-m[6], m[5]);
+    const y = Math.asin(Math.max(-1, Math.min(1, sy)));
+    const z = 0;
+    return [x, y, z];
+  } else {
+    // Normal case
+    const x = Math.atan2(m[9], m[10]);
+    const y = Math.asin(Math.max(-1, Math.min(1, sy)));
+    const z = Math.atan2(m[4], m[0]);
+    return [x, y, z];
+  }
+}
