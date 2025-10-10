@@ -1,6 +1,6 @@
 import type { Component } from './Component';
 import { Entity } from '../Entity';
-import * as M from '../../misc/mat4';
+import * as Q from '../../misc/quat';
 import { DELTA_TIME } from '../../Controller/Controller';
 
 export class Rotator implements Component {
@@ -12,8 +12,9 @@ export class Rotator implements Component {
     }
     update(entity: Entity) {
         const seconds = (DELTA_TIME ?? 16) / 1000;
-        const rot = M.mat4Rotation(this.axis.x * this.speed * seconds, this.axis.y * this.speed * seconds, this.axis.z * this.speed * seconds);
-        entity.rotation = M.mat4Mul(M.mat4(), rot, entity.rotation);
+        const rot = Q.quatFromEuler(this.axis.x * this.speed * seconds, this.axis.y * this.speed * seconds, this.axis.z * this.speed * seconds);
+        entity.rotation = Q.quatMul(Q.quat(), rot, entity.rotation);
+        entity.updateInverseRotation = true;
         return entity.rotation;
     }
 }
