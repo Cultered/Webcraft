@@ -32,6 +32,7 @@ export class WebGPUView extends BaseView {
     // Custom shader support
     private customShaderObjects: Entity[] = [];
     private customShaderBindGroups = new Map<string, GPUBindGroup[]>();
+    private customShaderObjectIndices = new Map<string, number>(); // Maps entity ID to storage buffer index
 
     /**
      * Initialize WebGPU context and set up rendering pipeline.
@@ -460,6 +461,13 @@ ${customShader.fragmentShader}
                 const buf = this.objectBuffers.get(meshComponent.mesh.id);
                 if (!buf) continue;
 
+                // Get the storage buffer index for this entity
+                const instanceIndex = this.customShaderObjectIndices.get(entity.id);
+                if (instanceIndex === undefined) {
+                    console.warn(`No storage buffer index found for custom shader entity: ${entity.id}`);
+                    continue;
+                }
+
                 // Switch to custom pipeline
                 passEncoder.setPipeline(pipeline);
 
@@ -478,8 +486,8 @@ ${customShader.fragmentShader}
                 const indexFormat: GPUIndexFormat = buf.indices instanceof Uint16Array ? 'uint16' : 'uint32';
                 passEncoder.setIndexBuffer(buf.indexBuffer, indexFormat);
 
-                // Draw this single object (instance index 0, since we're not batching)
-                passEncoder.drawIndexed(buf.indices.length, 1, 0, 0, 0);
+                // Draw this single object with the correct instance index
+                passEncoder.drawIndexed(buf.indices.length, 1, 0, 0, instanceIndex);
                 objIndex++;
             }
 
@@ -544,7 +552,7 @@ ${customShader.fragmentShader}
 
     private updateObjectStorageBufferWithSeparation(staticObjects: Entity[], nonStaticObjects: Entity[]): void {
         if (!this.device) throw new Error('Device not initialized');
-        const totalObjectCount = staticObjects.length + nonStaticObjects.length;
+        const totalObjectCount = staticObjects.length + nonStaticObjects.length + this.customShaderObjects.length;
         // Ensure storage buffer is large enough; if we recreated it we must also rebuild the bind group
         let recreated = false;
         if (totalObjectCount > this.maxObjects || !this.objectStorageBuffer) {
@@ -556,6 +564,10 @@ ${customShader.fragmentShader}
 
         const all = this.buildBatchesAndMatrixBuffer(staticObjects, nonStaticObjects);
         this.device.queue.writeBuffer(this.objectStorageBuffer!, 0, all.buffer, 0, all.byteLength);
+
+        // Add custom shader object transforms after the regular objects
+        const customShaderBaseIndex = staticObjects.length + nonStaticObjects.length;
+        this.updateCustomShaderObjectTransforms(customShaderBaseIndex);
 
         if (recreated) {
             // Note: Bind groups are now created dynamically in render() based on texture
@@ -584,6 +596,10 @@ ${customShader.fragmentShader}
 
         // Update batch information for non-static objects
         this.updateNonStaticBatches(nonStaticObjects);
+
+        // Update custom shader object transforms
+        const customShaderBaseIndex = this.staticSceneObjects.length + nonStaticObjects.length;
+        this.updateCustomShaderObjectTransforms(customShaderBaseIndex);
     }
 
     private buildBatchesAndMatrixBuffer(staticObjs: Entity[], nonStaticObjs: Entity[]) {
@@ -709,6 +725,32 @@ ${customShader.fragmentShader}
             cursor += arr.length;
         }
 
+    }
+
+    /**
+     * Update transform matrices for custom shader objects in the storage buffer
+     */
+    private updateCustomShaderObjectTransforms(baseIndex: number): void {
+        if (!this.device || !this.objectStorageBuffer) return;
+
+        this.customShaderObjectIndices.clear();
+
+        for (let i = 0; i < this.customShaderObjects.length; i++) {
+            const entity = this.customShaderObjects[i];
+            const storageIndex = baseIndex + i;
+            
+            // Store the index for this entity
+            this.customShaderObjectIndices.set(entity.id, storageIndex);
+
+            // Compute transform matrix
+            const t = [entity.position[0], entity.position[1], entity.position[2]];
+            const s = [entity.scale[0], entity.scale[1], entity.scale[2]];
+            const matrix = M.mat4Transpose(M.mat4TRS(t, entity.rotation, s));
+
+            // Write matrix to buffer at the correct offset
+            const offsetBytes = storageIndex * 16 * 4; // 16 floats * 4 bytes per float
+            this.device.queue.writeBuffer(this.objectStorageBuffer, offsetBytes, matrix.buffer, 0, matrix.byteLength);
+        }
     }
 
     /**
