@@ -6,39 +6,12 @@ import debug from '../Debug/Debug';
 import type Entity from '../Model/Entity';
 import MeshComponent from '../Model/Components/MeshComponent';
 
-/**
- * WebGPU-based rendering implementation with static/non-static object optimization.
- * 
- * This class provides a modern, efficient implementation using the WebGPU API.
- * It leverages compute shaders, storage buffers, and advanced GPU features
- * for high-performance rendering of large numbers of objects.
- * 
- * Key Optimization Features:
- * - **Static/Non-static Separation**: Objects are sorted first by static/non-static status,
- *   then by mesh type for optimal rendering performance
- * - **Partial Buffer Updates**: Only non-static objects are updated when their transforms change,
- *   while static objects remain untouched in GPU memory
- * - **Batched Rendering**: Objects are rendered in batches by mesh type to minimize state changes
- * 
- * Buffer Layout:
- * ```
- * [Static Objects by Mesh A] [Static Objects by Mesh B] ... [Non-static Objects by Mesh A] [Non-static Objects by Mesh B] ...
- * ```
- * 
- * Features:
- * - WebGPU context initialization with high-performance adapter
- * - Storage buffer-based object matrix management with static optimization
- * - Efficient instanced rendering with mesh-based batching
- * - Automatic resource management and cleanup
- * - Modern shader pipeline with WGSL
- * - Debug information display
- */
+
 export class WebGPUView extends BaseView {
-    // WebGPU properties
     private device?: GPUDevice;
     private context?: GPUCanvasContext;
     private depthTexture?: GPUTexture;
-    private renderPipeline?: GPURenderPipeline;
+    private renderPipelines = new Map<string, GPURenderPipeline>();
     private objectBuffers = new Map<string, { vertexBuffer: GPUBuffer; indexBuffer: GPUBuffer; indices: Uint32Array | Uint16Array }>();
     private staticMeshBatches = new Map<string, { base: number; count: number; meshId: string; textureId: string }>();
     private nonStaticMeshBatches = new Map<string, { base: number; count: number; meshId: string; textureId: string }>();
@@ -160,7 +133,7 @@ export class WebGPUView extends BaseView {
                     depthStencil: { format: 'depth24plus', depthWriteEnabled: true, depthCompare: 'less' },
                 } as GPURenderPipelineDescriptor;
 
-                this.renderPipeline = device.createRenderPipeline(pipelineDescriptor);
+                this.renderPipelines.set('default', device.createRenderPipeline(pipelineDescriptor));
                 console.log('render pipeline created');
 
                 const resizeCanvasAndDepthTexture = () => {
@@ -251,7 +224,7 @@ export class WebGPUView extends BaseView {
     }
 
     public render(): void {
-        if (!this.device || !this.context || !this.renderPipeline || !this.depthTexture || !this.msaaColorTexture) {
+        if (!this.device || !this.context || !this.renderPipelines.get('default') || !this.depthTexture || !this.msaaColorTexture) {
             console.warn('Render skipped: device/context/pipeline not ready');
             return;
         }
@@ -278,7 +251,7 @@ export class WebGPUView extends BaseView {
         try {
             const commandEncoder = this.device.createCommandEncoder();
             const passEncoder = commandEncoder.beginRenderPass(renderPassDescriptor);
-            passEncoder.setPipeline(this.renderPipeline);
+            passEncoder.setPipeline(this.renderPipelines.get('default')!);
 
             // Optimized rendering: draw static objects first, then non-static objects, grouped by mesh+texture
             let objIndex = 0;
@@ -549,7 +522,7 @@ export class WebGPUView extends BaseView {
      * @returns GPUBindGroup for the texture
      */
     private getBindGroupForTexture(textureId: string): GPUBindGroup {
-        if (!this.device || !this.renderPipeline) {
+        if (!this.device || !this.renderPipelines.get('default')) {
             throw new Error('WebGPU device or pipeline not initialized');
         }
 
@@ -565,7 +538,7 @@ export class WebGPUView extends BaseView {
         }
 
         // Create bind group layout
-        const bindGroupLayout = this.renderPipeline.getBindGroupLayout(0);
+        const bindGroupLayout = this.renderPipelines.get('default')!.getBindGroupLayout(0);
 
         // Create new bind group for this texture
         const bindGroup = this.device.createBindGroup({

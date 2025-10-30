@@ -7,7 +7,7 @@ import { generateSphereMesh } from './Types/MeshUtils';
 import { loadOBJ } from './Types/MeshUtils';
 import { mat4Rotation } from './misc/mat4'
 import { vec4 } from './misc/vec4';
-import { sphere3 } from './misc/misc';
+import { sphere2 } from './misc/misc';
 import { loadImageData, loadOBJFile } from './misc/loadFiles';
 import exampleTextureUrl from './misc/lex.png';
 
@@ -25,7 +25,7 @@ import exampleTextureUrl from './misc/lex.png';
     const sphereComponent = new MeshComponent(sphereMesh, 'example-texture');
 
 
-    const points = sphere3(20, 6, 7);
+    const points = sphere2(20, 6, 7);
     points.forEach(([x, y, z], idx) => {
         const id = `sphere-${idx}`;
         const ent = new Entity(id, vec4(x, y, z), undefined, vec4(3, 3, 3, 1), true);

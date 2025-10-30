@@ -5,18 +5,8 @@ import * as M from '../misc/mat4';
 import MeshComponent from '../Model/Components/MeshComponent';
 
 /**
- * WebGL-based rendering implementation.
- * 
- * This class provides a clean, focused implementation for WebGL 2.0 rendering.
- * It handles shader compilation, buffer management, and rendering operations
- * specific to the WebGL API.
- * 
- * Features:
- * - WebGL 2.0 context initialization with optimal settings
- * - Efficient batch rendering with minimal state changes
- * - Automatic mesh buffer management
- * - Per-object matrix transformations
- * - Debug information display
+ * not updated anymore
+ * is used when WebGPU is not available
  */
 export class WebGLView extends BaseView {
     // WebGL properties
