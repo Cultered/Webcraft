@@ -566,7 +566,7 @@ ${customShader.fragmentShader}
         this.device.queue.writeBuffer(this.objectStorageBuffer!, 0, all.buffer, 0, all.byteLength);
 
         // Add custom shader object transforms after the regular objects
-        const customShaderBaseIndex = staticObjects.length + nonStaticObjects.length;
+        const customShaderBaseIndex = this.getCustomShaderBaseIndex(staticObjects, nonStaticObjects);
         this.updateCustomShaderObjectTransforms(customShaderBaseIndex);
 
         if (recreated) {
@@ -598,8 +598,15 @@ ${customShader.fragmentShader}
         this.updateNonStaticBatches(nonStaticObjects);
 
         // Update custom shader object transforms
-        const customShaderBaseIndex = this.staticSceneObjects.length + nonStaticObjects.length;
+        const customShaderBaseIndex = this.getCustomShaderBaseIndex(this.staticSceneObjects, nonStaticObjects);
         this.updateCustomShaderObjectTransforms(customShaderBaseIndex);
+    }
+
+    /**
+     * Calculate the base index for custom shader objects in the storage buffer
+     */
+    private getCustomShaderBaseIndex(staticObjects: Entity[], nonStaticObjects: Entity[]): number {
+        return staticObjects.length + nonStaticObjects.length;
     }
 
     private buildBatchesAndMatrixBuffer(staticObjs: Entity[], nonStaticObjs: Entity[]) {
