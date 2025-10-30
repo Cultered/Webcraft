@@ -1,9 +1,27 @@
 import type { Component } from './Component';
 
 /**
+ * Specification for an additional buffer to bind in group 1
+ */
+export interface CustomBufferSpec {
+    binding: number;
+    size: number;
+    type: 'uniform' | 'storage' | 'read-only-storage';
+    visibility: number; // GPUShaderStage flags
+    /** 
+     * Buffer data. Update this field to change the buffer contents.
+     * The WebGPU view will automatically sync this to the GPU buffer.
+     */
+    data: ArrayBuffer | ArrayBufferView;
+}
+
+/**
  * Component for custom shaders in WebGPU backend.
  * Contains vertex and fragment shader code, additional buffer specifications,
  * and an ID for pipeline caching.
+ * 
+ * WebGPU-specific operations (buffer creation, updates) are handled internally
+ * by the WebGPUView. Users only need to update the `data` field of buffers.
  */
 export class CustomRenderShader implements Component {
     /** Unique identifier for this shader, used for pipeline caching */
@@ -16,31 +34,22 @@ export class CustomRenderShader implements Component {
     fragmentShader: string;
     
     /** 
-     * Additional buffers to bind in group 1 (group 0 is reserved for default bindings).
-     * Each entry specifies the buffer binding configuration.
+     * Additional buffer specifications for group 1 bindings.
+     * Users should update the `data` field to change buffer contents.
+     * The WebGPU view handles buffer creation and GPU updates automatically.
      */
-    additionalBuffers: Array<{
-        binding: number;
-        buffer: GPUBuffer;
-        type: 'uniform' | 'storage' | 'read-only-storage';
-        visibility: number; // GPUShaderStage flags
-    }>;
+    public bufferSpecs: CustomBufferSpec[];
 
     constructor(
         id: string,
         vertexShader: string,
         fragmentShader: string,
-        additionalBuffers: Array<{
-            binding: number;
-            buffer: GPUBuffer;
-            type: 'uniform' | 'storage' | 'read-only-storage';
-            visibility: number;
-        }> = []
+        bufferSpecs: CustomBufferSpec[] = []
     ) {
         this.id = id;
         this.vertexShader = vertexShader;
         this.fragmentShader = fragmentShader;
-        this.additionalBuffers = additionalBuffers;
+        this.bufferSpecs = bufferSpecs;
     }
 
     // Component interface requires at least start or update

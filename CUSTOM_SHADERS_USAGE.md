@@ -99,18 +99,11 @@ The WebGPU view will automatically:
 
 ## Advanced: Using Additional Buffers (Group 1)
 
-You can bind additional buffers to group 1 for custom data:
+You can bind additional buffers to group 1 for custom data. The WebGPU view handles buffer creation and updates automatically - you only need to provide the data:
 
 ```typescript
-// Create a custom uniform buffer
-const customDataBuffer = device.createBuffer({
-    size: 16, // vec4f = 16 bytes
-    usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
-});
-
-// Write data to the buffer
+// Create buffer data - NO need to call device.createBuffer() or device.queue.writeBuffer()
 const customData = new Float32Array([1.0, 0.5, 0.2, 1.0]);
-device.queue.writeBuffer(customDataBuffer, 0, customData.buffer);
 
 // Vertex shader with group 1 binding
 const vertexShader = `
@@ -138,7 +131,7 @@ fn fragment_main(fragData: VertexOut) -> @location(0) vec4f {
 }
 `;
 
-// Create shader with additional buffer
+// Create shader with buffer specification
 const customShader = new CustomRenderShader(
     'custom-color-shader',
     vertexShader,
@@ -146,12 +139,17 @@ const customShader = new CustomRenderShader(
     [
         {
             binding: 0,
-            buffer: customDataBuffer,
+            size: customData.byteLength, // Size in bytes
+            data: customData,             // ArrayBuffer or TypedArray
             type: 'uniform',
             visibility: GPUShaderStage.VERTEX | GPUShaderStage.FRAGMENT
         }
     ]
 );
+
+// To update the buffer data later, just modify the data field:
+customShader.bufferSpecs[0].data = new Float32Array([0.5, 1.0, 0.3, 1.0]);
+// The WebGPU view will automatically sync this to the GPU buffer
 ```
 
 ## Important Notes

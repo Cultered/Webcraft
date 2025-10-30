@@ -105,9 +105,6 @@ fn fragment_main() -> @location(0) vec4f {
     });
 
     it('should handle custom shaders with additional buffers', () => {
-        // In a real scenario, this would be a GPUBuffer created by device.createBuffer()
-        const mockBuffer = {} as GPUBuffer;
-
         const vertexShader = `
 @group(0) @binding(0) var<storage, read> objectMatrices: array<mat4x4<f32>>;
 @group(1) @binding(0) var<uniform> customData: vec4f;
@@ -126,6 +123,9 @@ fn fragment_main() -> @location(0) vec4f {
     return vec4f(1.0, 0.5, 0.0, 1.0); // Orange
 }`;
 
+        // Create buffer data - WebGPU view will handle buffer creation
+        const customData = new Float32Array([1.0, 0.5, 0.2, 1.0]);
+
         const customShader = new CustomRenderShader(
             'shader-with-buffer',
             vertexShader,
@@ -133,7 +133,8 @@ fn fragment_main() -> @location(0) vec4f {
             [
                 {
                     binding: 0,
-                    buffer: mockBuffer,
+                    size: customData.byteLength,
+                    data: customData,
                     type: 'uniform',
                     visibility: 0x1 // GPUShaderStage.VERTEX
                 }
@@ -153,8 +154,8 @@ fn fragment_main() -> @location(0) vec4f {
         entity.addComponent(customShader);
 
         const shader = entity.getComponent(CustomRenderShader);
-        expect(shader?.additionalBuffers.length).toBe(1);
-        expect(shader?.additionalBuffers[0].binding).toBe(0);
-        expect(shader?.additionalBuffers[0].type).toBe('uniform');
+        expect(shader?.bufferSpecs.length).toBe(1);
+        expect(shader?.bufferSpecs[0].binding).toBe(0);
+        expect(shader?.bufferSpecs[0].type).toBe('uniform');
     });
 });

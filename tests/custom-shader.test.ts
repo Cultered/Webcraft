@@ -30,7 +30,7 @@ fn fragment_main(fragData: VertexOut) -> @location(0) vec4f {
         expect(customShader.id).toBe('test-shader');
         expect(customShader.vertexShader).toBe(vertexShader);
         expect(customShader.fragmentShader).toBe(fragmentShader);
-        expect(customShader.additionalBuffers).toEqual([]);
+        expect(customShader.bufferSpecs).toEqual([]);
     });
 
     it('should attach CustomRenderShader to an entity', () => {
@@ -58,8 +58,8 @@ fn fragment_main(fragData: VertexOut) -> @location(0) vec4f {
     });
 
     it('should allow custom shader with additional buffers', () => {
-        // Mock GPUBuffer for testing (in real usage, this would be created by WebGPU device)
-        const mockBuffer = {} as GPUBuffer;
+        // Create buffer data (WebGPU device will create actual GPU buffers)
+        const bufferData = new Float32Array([1.0, 0.5, 0.2, 1.0]);
 
         const customShader = new CustomRenderShader(
             'shader-with-buffers',
@@ -68,16 +68,18 @@ fn fragment_main(fragData: VertexOut) -> @location(0) vec4f {
             [
                 {
                     binding: 0,
-                    buffer: mockBuffer,
+                    size: bufferData.byteLength,
+                    data: bufferData,
                     type: 'uniform',
                     visibility: 0x1 // GPUShaderStage.VERTEX
                 }
             ]
         );
 
-        expect(customShader.additionalBuffers).toHaveLength(1);
-        expect(customShader.additionalBuffers[0].binding).toBe(0);
-        expect(customShader.additionalBuffers[0].type).toBe('uniform');
+        expect(customShader.bufferSpecs).toHaveLength(1);
+        expect(customShader.bufferSpecs[0].binding).toBe(0);
+        expect(customShader.bufferSpecs[0].type).toBe('uniform');
+        expect(customShader.bufferSpecs[0].size).toBe(16);
     });
 
     it('should work alongside MeshComponent on the same entity', () => {

@@ -5,7 +5,7 @@ import * as M from '../misc/mat4';
 import debug from '../Debug/Debug';
 import type Entity from '../Model/Entity';
 import MeshComponent from '../Model/Components/MeshComponent';
-import CustomRenderShader from '../Model/Components/CustomRenderShader';
+import CustomRenderShader, { type CustomBufferSpec } from '../Model/Components/CustomRenderShader';
 
 
 export class WebGPUView extends BaseView {
@@ -33,6 +33,7 @@ export class WebGPUView extends BaseView {
     private customShaderObjects: Entity[] = [];
     private customShaderBindGroups = new Map<string, GPUBindGroup[]>();
     private customShaderObjectIndices = new Map<string, number>(); // Maps entity ID to storage buffer index
+    private customShaderBuffers = new Map<string, Map<number, GPUBuffer>>(); // Maps shader ID -> binding -> GPUBuffer
 
     /**
      * Initialize WebGPU context and set up rendering pipeline.
@@ -277,11 +278,11 @@ ${customShader.fragmentShader}
                 });
 
                 // Create bind group layout for group 1 (additional custom buffers)
-                const group1Entries = customShader.additionalBuffers.map(buf => ({
-                    binding: buf.binding,
-                    visibility: buf.visibility,
+                const group1Entries = customShader.bufferSpecs.map(spec => ({
+                    binding: spec.binding,
+                    visibility: spec.visibility,
                     buffer: { 
-                        type: buf.type as GPUBufferBindingType
+                        type: spec.type as GPUBufferBindingType
                     }
                 }));
 
@@ -340,13 +341,36 @@ ${customShader.fragmentShader}
                 const pipeline = this.device.createRenderPipeline(pipelineDescriptor);
                 this.renderPipelines.set(`custom-${customShader.id}`, pipeline);
 
-                // Create bind group for group 1 if there are additional buffers
+                // Create GPU buffers and bind group for group 1 if there are buffer specs
                 if (group1Entries.length > 0) {
+                    const bufferMap = new Map<number, GPUBuffer>();
+                    
+                    // Create GPU buffers for each buffer spec
+                    for (const spec of customShader.bufferSpecs) {
+                        const buffer = this.device.createBuffer({
+                            size: spec.size,
+                            usage: GPUBufferUsage.COPY_DST | (
+                                spec.type === 'uniform' ? GPUBufferUsage.UNIFORM :
+                                spec.type === 'storage' ? GPUBufferUsage.STORAGE :
+                                GPUBufferUsage.STORAGE // read-only-storage also uses STORAGE
+                            )
+                        });
+                        
+                        // Initialize buffer with data
+                        this.updateCustomBuffer(buffer, spec);
+                        
+                        bufferMap.set(spec.binding, buffer);
+                    }
+                    
+                    // Store buffer map for this shader
+                    this.customShaderBuffers.set(customShader.id, bufferMap);
+                    
+                    // Create bind group with the created buffers
                     const bindGroup1 = this.device.createBindGroup({
                         layout: bindGroupLayout1,
-                        entries: customShader.additionalBuffers.map(buf => ({
-                            binding: buf.binding,
-                            resource: { buffer: buf.buffer }
+                        entries: customShader.bufferSpecs.map(spec => ({
+                            binding: spec.binding,
+                            resource: { buffer: bufferMap.get(spec.binding)! }
                         }))
                     });
                     
@@ -600,6 +624,9 @@ ${customShader.fragmentShader}
         // Update custom shader object transforms
         const customShaderBaseIndex = this.getCustomShaderBaseIndex(this.staticSceneObjects, nonStaticObjects);
         this.updateCustomShaderObjectTransforms(customShaderBaseIndex);
+
+        // Update custom shader buffers
+        this.updateCustomShaderBuffers();
     }
 
     /**
@@ -757,6 +784,47 @@ ${customShader.fragmentShader}
             // Write matrix to buffer at the correct offset
             const offsetBytes = storageIndex * 16 * 4; // 16 floats * 4 bytes per float
             this.device.queue.writeBuffer(this.objectStorageBuffer, offsetBytes, matrix.buffer, 0, matrix.byteLength);
+        }
+    }
+
+    /**
+     * Helper method to update a GPU buffer from a buffer spec's data
+     */
+    private updateCustomBuffer(buffer: GPUBuffer, spec: CustomBufferSpec): void {
+        if (!this.device) return;
+        
+        // Convert data to ArrayBuffer if needed
+        let data: ArrayBuffer;
+        if (spec.data instanceof ArrayBuffer) {
+            data = spec.data;
+        } else {
+            data = spec.data.buffer.slice(spec.data.byteOffset, spec.data.byteOffset + spec.data.byteLength);
+        }
+        
+        this.device.queue.writeBuffer(buffer, 0, data);
+    }
+
+    /**
+     * Update all custom shader buffers from their buffer specs
+     * Called during updateNonStaticObjectsOnly to sync user changes
+     */
+    private updateCustomShaderBuffers(): void {
+        if (!this.device) return;
+
+        for (const entity of this.customShaderObjects) {
+            const customShader = entity.getComponent(CustomRenderShader);
+            if (!customShader) continue;
+
+            const bufferMap = this.customShaderBuffers.get(customShader.id);
+            if (!bufferMap) continue;
+
+            // Update each buffer from its spec's data
+            for (const spec of customShader.bufferSpecs) {
+                const buffer = bufferMap.get(spec.binding);
+                if (buffer) {
+                    this.updateCustomBuffer(buffer, spec);
+                }
+            }
         }
     }
 
