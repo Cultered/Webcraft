@@ -5,6 +5,7 @@ import * as M from '../misc/mat4';
 import debug from '../Debug/Debug';
 import type Entity from '../Model/Entity';
 import MeshComponent from '../Model/Components/MeshComponent';
+import CustomRenderShader, { type CustomBufferSpec } from '../Model/Components/CustomRenderShader';
 
 
 export class WebGPUView extends BaseView {
@@ -27,6 +28,12 @@ export class WebGPUView extends BaseView {
     // Added MSAA fields
     private msaaColorTexture?: GPUTexture;
     private sampleCount = 4; // or 2/4/8 based on adapter
+
+    // Custom shader support
+    private customShaderObjects: Entity[] = [];
+    private customShaderBindGroups = new Map<string, GPUBindGroup[]>();
+    private customShaderObjectIndices = new Map<string, number>(); // Maps entity ID to storage buffer index
+    private customShaderBuffers = new Map<string, Map<number, GPUBuffer>>(); // Maps shader ID -> binding -> GPUBuffer
 
     /**
      * Initialize WebGPU context and set up rendering pipeline.
@@ -177,8 +184,35 @@ export class WebGPUView extends BaseView {
     public registerSceneObjectsSeparated(staticObjects: Entity[], nonStaticObjects: Entity[], updateStatic: boolean): void {
         if (!this.device) throw new Error('WebGPU device not initialized');
 
-        this.staticSceneObjects = staticObjects;
-        this.nonStaticSceneObjects = nonStaticObjects;
+        // Separate custom shader objects from regular objects
+        const regularStaticObjects: Entity[] = [];
+        const regularNonStaticObjects: Entity[] = [];
+        const customShaderObjects: Entity[] = [];
+
+        for (const e of staticObjects) {
+            if (e.getComponent(CustomRenderShader)) {
+                customShaderObjects.push(e);
+            } else {
+                regularStaticObjects.push(e);
+            }
+        }
+
+        for (const e of nonStaticObjects) {
+            if (e.getComponent(CustomRenderShader)) {
+                customShaderObjects.push(e);
+            } else {
+                regularNonStaticObjects.push(e);
+            }
+        }
+
+        this.staticSceneObjects = regularStaticObjects;
+        this.nonStaticSceneObjects = regularNonStaticObjects;
+        this.customShaderObjects = customShaderObjects;
+
+        // Create custom pipelines for each unique shader
+        if (customShaderObjects.length > 0) {
+            this.createCustomPipelines(customShaderObjects);
+        }
 
         if (updateStatic) {
             // When static data is refreshed, make sure all meshes referenced by either
@@ -193,13 +227,160 @@ export class WebGPUView extends BaseView {
                     this.uploadMeshToGPU(m.id, m.vertices, m.normals, m.uvs, m.indices);
                 }
             };
-            for (const e of staticObjects) ensureMeshUploaded(e);
-            for (const e of nonStaticObjects) ensureMeshUploaded(e);
+            for (const e of regularStaticObjects) ensureMeshUploaded(e);
+            for (const e of regularNonStaticObjects) ensureMeshUploaded(e);
+            for (const e of customShaderObjects) ensureMeshUploaded(e);
             // Update entire buffer including static objects
-            this.updateObjectStorageBufferWithSeparation(staticObjects, nonStaticObjects);
+            this.updateObjectStorageBufferWithSeparation(regularStaticObjects, regularNonStaticObjects);
         } else {
             // Only update non-static portion
-            this.updateNonStaticObjectsOnly(nonStaticObjects);
+            this.updateNonStaticObjectsOnly(regularNonStaticObjects);
+        }
+    }
+
+    /**
+     * Create custom render pipelines for objects with CustomRenderShader component
+     */
+    private createCustomPipelines(customShaderObjects: Entity[]): void {
+        if (!this.device) return;
+
+        // Get unique shader IDs
+        const processedShaders = new Set<string>();
+
+        for (const entity of customShaderObjects) {
+            const customShader = entity.getComponent(CustomRenderShader);
+            if (!customShader || processedShaders.has(customShader.id)) continue;
+
+            processedShaders.add(customShader.id);
+
+            // Check if pipeline already exists
+            if (this.renderPipelines.has(`custom-${customShader.id}`)) continue;
+
+            try {
+                // Create shader module with custom vertex and fragment shaders
+                const shaderModule = this.device.createShaderModule({
+                    code: `
+${customShader.vertexShader}
+
+${customShader.fragmentShader}
+                    `
+                });
+
+                // Create bind group layout for group 0 (same as default pipeline)
+                const bindGroupLayout0 = this.device.createBindGroupLayout({
+                    entries: [
+                        { binding: 0, visibility: GPUShaderStage.VERTEX, buffer: { type: 'read-only-storage' } },
+                        { binding: 1, visibility: GPUShaderStage.VERTEX, buffer: { type: 'uniform' } },
+                        { binding: 2, visibility: GPUShaderStage.VERTEX, buffer: { type: 'uniform' } },
+                        { binding: 3, visibility: GPUShaderStage.FRAGMENT, sampler: {} },
+                        { binding: 4, visibility: GPUShaderStage.FRAGMENT, texture: { sampleType: 'float' } },
+                    ],
+                });
+
+                // Create bind group layout for group 1 (additional custom buffers)
+                const group1Entries = customShader.bufferSpecs.map(spec => ({
+                    binding: spec.binding,
+                    visibility: spec.visibility,
+                    buffer: { 
+                        type: spec.type as GPUBufferBindingType
+                    }
+                }));
+
+                const bindGroupLayout1 = this.device.createBindGroupLayout({
+                    entries: group1Entries
+                });
+
+                // Create pipeline layout with both bind groups
+                const pipelineLayout = this.device.createPipelineLayout({
+                    bindGroupLayouts: group1Entries.length > 0 
+                        ? [bindGroupLayout0, bindGroupLayout1]
+                        : [bindGroupLayout0]
+                });
+
+                // Define vertex buffers (same format as default pipeline)
+                const vertexBuffers = [
+                    {
+                        attributes: [
+                            { shaderLocation: 0, offset: 0, format: 'float32x3' },  // position
+                            { shaderLocation: 1, offset: 12, format: 'float32x3' }, // normal
+                            { shaderLocation: 2, offset: 24, format: 'float32x2' }  // uv
+                        ],
+                        arrayStride: 32,
+                        stepMode: 'vertex'
+                    }
+                ] as GPUVertexBufferLayout[];
+
+                // Create custom render pipeline
+                const pipelineDescriptor: GPURenderPipelineDescriptor = {
+                    vertex: { 
+                        module: shaderModule, 
+                        entryPoint: 'vertex_main', 
+                        buffers: vertexBuffers 
+                    },
+                    fragment: { 
+                        module: shaderModule, 
+                        entryPoint: 'fragment_main', 
+                        targets: [{ 
+                            format: navigator.gpu.getPreferredCanvasFormat(),
+                            blend: { 
+                                color: { srcFactor: 'one', dstFactor: 'one-minus-src-alpha' }, 
+                                alpha: { srcFactor: 'one', dstFactor: 'one-minus-src-alpha' } 
+                            } 
+                        }] 
+                    },
+                    primitive: { topology: 'triangle-list', cullMode: 'back' },
+                    layout: pipelineLayout,
+                    multisample: { count: this.sampleCount },
+                    depthStencil: { 
+                        format: 'depth24plus', 
+                        depthWriteEnabled: true, 
+                        depthCompare: 'less' 
+                    },
+                };
+
+                const pipeline = this.device.createRenderPipeline(pipelineDescriptor);
+                this.renderPipelines.set(`custom-${customShader.id}`, pipeline);
+
+                // Create GPU buffers and bind group for group 1 if there are buffer specs
+                if (group1Entries.length > 0) {
+                    const bufferMap = new Map<number, GPUBuffer>();
+                    
+                    // Create GPU buffers for each buffer spec
+                    for (const spec of customShader.bufferSpecs) {
+                        const buffer = this.device.createBuffer({
+                            size: spec.size,
+                            usage: GPUBufferUsage.COPY_DST | (
+                                spec.type === 'uniform' ? GPUBufferUsage.UNIFORM :
+                                spec.type === 'storage' ? GPUBufferUsage.STORAGE :
+                                GPUBufferUsage.STORAGE // read-only-storage also uses STORAGE
+                            )
+                        });
+                        
+                        // Initialize buffer with data
+                        this.updateCustomBuffer(buffer, spec);
+                        
+                        bufferMap.set(spec.binding, buffer);
+                    }
+                    
+                    // Store buffer map for this shader
+                    this.customShaderBuffers.set(customShader.id, bufferMap);
+                    
+                    // Create bind group with the created buffers
+                    const bindGroup1 = this.device.createBindGroup({
+                        layout: bindGroupLayout1,
+                        entries: customShader.bufferSpecs.map(spec => ({
+                            binding: spec.binding,
+                            resource: { buffer: bufferMap.get(spec.binding)! }
+                        }))
+                    });
+                    
+                    this.customShaderBindGroups.set(customShader.id, [bindGroup1]);
+                }
+
+                console.log(`Custom pipeline created for shader: ${customShader.id}`);
+            } catch (error) {
+                console.error(`Failed to create custom pipeline for shader ${customShader.id}:`, error);
+            }
         }
     }
 
@@ -288,12 +469,58 @@ export class WebGPUView extends BaseView {
             }
             debug.log(`Drawn ${objIndex} objects in total.`);
 
+            // Render custom shader objects individually after normal batches
+            for (const entity of this.customShaderObjects) {
+                const customShader = entity.getComponent(CustomRenderShader);
+                const meshComponent = entity.getComponent(MeshComponent);
+                
+                if (!customShader || !meshComponent) continue;
+
+                const pipeline = this.renderPipelines.get(`custom-${customShader.id}`);
+                if (!pipeline) {
+                    console.warn(`Custom pipeline not found for shader: ${customShader.id}`);
+                    continue;
+                }
+
+                const buf = this.objectBuffers.get(meshComponent.mesh.id);
+                if (!buf) continue;
+
+                // Get the storage buffer index for this entity
+                const instanceIndex = this.customShaderObjectIndices.get(entity.id);
+                if (instanceIndex === undefined) {
+                    console.warn(`No storage buffer index found for custom shader entity: ${entity.id}`);
+                    continue;
+                }
+
+                // Switch to custom pipeline
+                passEncoder.setPipeline(pipeline);
+
+                // Bind group 0 (default bindings: camera, projection, texture, etc.)
+                const bindGroup0 = this.getBindGroupForTexture(meshComponent.texture);
+                passEncoder.setBindGroup(0, bindGroup0);
+
+                // Bind group 1 (custom additional buffers)
+                const bindGroups1 = this.customShaderBindGroups.get(customShader.id);
+                if (bindGroups1 && bindGroups1.length > 0) {
+                    passEncoder.setBindGroup(1, bindGroups1[0]);
+                }
+
+                // Set vertex and index buffers
+                passEncoder.setVertexBuffer(0, buf.vertexBuffer);
+                const indexFormat: GPUIndexFormat = buf.indices instanceof Uint16Array ? 'uint16' : 'uint32';
+                passEncoder.setIndexBuffer(buf.indexBuffer, indexFormat);
+
+                // Draw this single object with the correct instance index
+                passEncoder.drawIndexed(buf.indices.length, 1, 0, 0, instanceIndex);
+                objIndex++;
+            }
+
             passEncoder.end();
             this.device.queue.submit([commandEncoder.finish()]);
         } catch (e) {
             console.error('Render error:', e);
         }
-        debug.log(`WebGPUView rendered ${this.staticSceneObjects.length} static objects; ${this.nonStaticSceneObjects.length} non-static objects.`);
+        debug.log(`WebGPUView rendered ${this.staticSceneObjects.length} static objects; ${this.nonStaticSceneObjects.length} non-static objects; ${this.customShaderObjects.length} custom shader objects.`);
     }
 
     private createBuffersForMesh(meshId: string): void {
@@ -349,7 +576,7 @@ export class WebGPUView extends BaseView {
 
     private updateObjectStorageBufferWithSeparation(staticObjects: Entity[], nonStaticObjects: Entity[]): void {
         if (!this.device) throw new Error('Device not initialized');
-        const totalObjectCount = staticObjects.length + nonStaticObjects.length;
+        const totalObjectCount = staticObjects.length + nonStaticObjects.length + this.customShaderObjects.length;
         // Ensure storage buffer is large enough; if we recreated it we must also rebuild the bind group
         let recreated = false;
         if (totalObjectCount > this.maxObjects || !this.objectStorageBuffer) {
@@ -361,6 +588,10 @@ export class WebGPUView extends BaseView {
 
         const all = this.buildBatchesAndMatrixBuffer(staticObjects, nonStaticObjects);
         this.device.queue.writeBuffer(this.objectStorageBuffer!, 0, all.buffer, 0, all.byteLength);
+
+        // Add custom shader object transforms after the regular objects
+        const customShaderBaseIndex = this.getCustomShaderBaseIndex(staticObjects, nonStaticObjects);
+        this.updateCustomShaderObjectTransforms(customShaderBaseIndex);
 
         if (recreated) {
             // Note: Bind groups are now created dynamically in render() based on texture
@@ -389,6 +620,20 @@ export class WebGPUView extends BaseView {
 
         // Update batch information for non-static objects
         this.updateNonStaticBatches(nonStaticObjects);
+
+        // Update custom shader object transforms
+        const customShaderBaseIndex = this.getCustomShaderBaseIndex(this.staticSceneObjects, nonStaticObjects);
+        this.updateCustomShaderObjectTransforms(customShaderBaseIndex);
+
+        // Update custom shader buffers
+        this.updateCustomShaderBuffers();
+    }
+
+    /**
+     * Calculate the base index for custom shader objects in the storage buffer
+     */
+    private getCustomShaderBaseIndex(staticObjects: Entity[], nonStaticObjects: Entity[]): number {
+        return staticObjects.length + nonStaticObjects.length;
     }
 
     private buildBatchesAndMatrixBuffer(staticObjs: Entity[], nonStaticObjs: Entity[]) {
@@ -514,6 +759,73 @@ export class WebGPUView extends BaseView {
             cursor += arr.length;
         }
 
+    }
+
+    /**
+     * Update transform matrices for custom shader objects in the storage buffer
+     */
+    private updateCustomShaderObjectTransforms(baseIndex: number): void {
+        if (!this.device || !this.objectStorageBuffer) return;
+
+        this.customShaderObjectIndices.clear();
+
+        for (let i = 0; i < this.customShaderObjects.length; i++) {
+            const entity = this.customShaderObjects[i];
+            const storageIndex = baseIndex + i;
+            
+            // Store the index for this entity
+            this.customShaderObjectIndices.set(entity.id, storageIndex);
+
+            // Compute transform matrix
+            const t = [entity.position[0], entity.position[1], entity.position[2]];
+            const s = [entity.scale[0], entity.scale[1], entity.scale[2]];
+            const matrix = M.mat4Transpose(M.mat4TRS(t, entity.rotation, s));
+
+            // Write matrix to buffer at the correct offset
+            const offsetBytes = storageIndex * 16 * 4; // 16 floats * 4 bytes per float
+            this.device.queue.writeBuffer(this.objectStorageBuffer, offsetBytes, matrix.buffer, 0, matrix.byteLength);
+        }
+    }
+
+    /**
+     * Helper method to update a GPU buffer from a buffer spec's data
+     */
+    private updateCustomBuffer(buffer: GPUBuffer, spec: CustomBufferSpec): void {
+        if (!this.device) return;
+        
+        // Convert data to ArrayBuffer if needed
+        let data: ArrayBuffer;
+        if (spec.data instanceof ArrayBuffer) {
+            data = spec.data;
+        } else {
+            data = spec.data.buffer.slice(spec.data.byteOffset, spec.data.byteOffset + spec.data.byteLength);
+        }
+        
+        this.device.queue.writeBuffer(buffer, 0, data);
+    }
+
+    /**
+     * Update all custom shader buffers from their buffer specs
+     * Called during updateNonStaticObjectsOnly to sync user changes
+     */
+    private updateCustomShaderBuffers(): void {
+        if (!this.device) return;
+
+        for (const entity of this.customShaderObjects) {
+            const customShader = entity.getComponent(CustomRenderShader);
+            if (!customShader) continue;
+
+            const bufferMap = this.customShaderBuffers.get(customShader.id);
+            if (!bufferMap) continue;
+
+            // Update each buffer from its spec's data
+            for (const spec of customShader.bufferSpecs) {
+                const buffer = bufferMap.get(spec.binding);
+                if (buffer) {
+                    this.updateCustomBuffer(buffer, spec);
+                }
+            }
+        }
     }
 
     /**

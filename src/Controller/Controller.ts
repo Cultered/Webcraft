@@ -39,7 +39,7 @@ export default class Controller{
   private controllerLoop = () => {
     debug.perf("controller-loop", () => {
       debug.log(`Controller ready`);  
-      debug.perf("model-update",()=>this.model.update(DELTA_TIME));
+      debug.perf("model-update",()=>this.model.update());
       debug.log(this.model.getCamera(this.camId)?.position.reduce((prev, val) => prev + val.toFixed(2) + " ", "") || "No camera");
       this.renderLoop();
       requestAnimationFrame(this.controllerLoop);
