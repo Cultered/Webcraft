@@ -320,8 +320,8 @@ const customShader = new CustomRenderShader(
 
 - **cullMode** (optional): Controls triangle culling
   - `'none'`: No culling, render both sides
-  - `'front'`: Cull front-facing triangles
-  - `'back'`: Cull back-facing triangles (default)
+  - `'front'`: Cull front-facing triangles (counter-clockwise when viewed from camera)
+  - `'back'`: Cull back-facing triangles (clockwise when viewed from camera) (default)
 
 - **depthWriteEnabled** (optional): Whether to write to the depth buffer
   - `true`: Enable depth writes (default)

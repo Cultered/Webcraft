@@ -16,7 +16,9 @@ export interface CustomBufferSpec {
 }
 
 /**
- * Optional pipeline settings for custom render shaders
+ * Optional pipeline settings for custom render shaders.
+ * Uses WebGPU types (GPUCullMode, GPUBlendState, GPUCompareFunction) which are
+ * globally available via @webgpu/types package.
  */
 export interface PipelineSettings {
     /** Cull mode for triangle culling (default: 'back') */
