@@ -311,7 +311,7 @@ const customShader = new CustomRenderShader(
         cullMode: 'none',           // Disable backface culling
         depthWriteEnabled: false,   // Disable depth writes (useful for transparent objects)
         depthCompare: 'less-equal', // Change depth comparison
-        blend: undefined            // Disable blending (opaque rendering)
+        blend: null                 // Disable blending (opaque rendering)
     }
 );
 ```
