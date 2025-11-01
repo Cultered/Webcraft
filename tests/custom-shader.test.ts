@@ -106,4 +106,58 @@ fn fragment_main(fragData: VertexOut) -> @location(0) vec4f {
         expect(entity.getComponent(MeshComponent)).toBeDefined();
         expect(entity.getComponent(CustomRenderShader)).toBeDefined();
     });
+
+    it('should support optional pipeline settings', () => {
+        const customShader = new CustomRenderShader(
+            'shader-with-settings',
+            'vertex code',
+            'fragment code',
+            [],
+            {
+                cullMode: 'none',
+                depthWriteEnabled: false,
+                depthCompare: 'less-equal',
+                blend: {
+                    color: { srcFactor: 'one', dstFactor: 'one', operation: 'add' },
+                    alpha: { srcFactor: 'one', dstFactor: 'one', operation: 'add' }
+                }
+            }
+        );
+
+        expect(customShader.pipelineSettings).toBeDefined();
+        expect(customShader.pipelineSettings?.cullMode).toBe('none');
+        expect(customShader.pipelineSettings?.depthWriteEnabled).toBe(false);
+        expect(customShader.pipelineSettings?.depthCompare).toBe('less-equal');
+        expect(customShader.pipelineSettings?.blend).toBeDefined();
+        expect(customShader.pipelineSettings?.blend?.color.srcFactor).toBe('one');
+    });
+
+    it('should work without pipeline settings (use defaults)', () => {
+        const customShader = new CustomRenderShader(
+            'shader-default-settings',
+            'vertex code',
+            'fragment code'
+        );
+
+        expect(customShader.pipelineSettings).toBeUndefined();
+    });
+
+    it('should allow partial pipeline settings', () => {
+        const customShader = new CustomRenderShader(
+            'shader-partial-settings',
+            'vertex code',
+            'fragment code',
+            [],
+            {
+                cullMode: 'front',
+                depthWriteEnabled: false
+                // depthCompare and blend will use defaults
+            }
+        );
+
+        expect(customShader.pipelineSettings?.cullMode).toBe('front');
+        expect(customShader.pipelineSettings?.depthWriteEnabled).toBe(false);
+        expect(customShader.pipelineSettings?.depthCompare).toBeUndefined();
+        expect(customShader.pipelineSettings?.blend).toBeUndefined();
+    });
 });
