@@ -377,5 +377,5 @@ const opaqueShader = new CustomRenderShader(
 
 ## P.S
 
-- Static objects can have custom shaders, but as they do not recieve updates, any kind of additional buffers will not either, unless another non-static object also has the shader as one of the components.
+- Static objects can have custom shaders, but as they do not receive updates, any kind of additional buffers will not either, unless another non-static object also has the shader as one of the components.
 - All pipeline settings are optional. If not specified, sensible defaults are used (cullMode='back', alpha blending enabled, depthWriteEnabled=true, depthCompare='less').
