@@ -6,8 +6,10 @@ import { o11s } from '../config/config';
 import { setUpCanvas } from '../misc/setUpCanvas';
 
 export let DELTA_TIME = 0;
+export let CANVAS: HTMLCanvasElement;
+export let MODEL: Model;
 
-export default class Controller{
+export default class Controller {
   public model!: Model;
   public view!: BaseView;
   private camId: string;
@@ -15,13 +17,15 @@ export default class Controller{
   private canvasEl!: HTMLCanvasElement;
 
 
-  constructor(camId='main-camera',canvasEl?: HTMLCanvasElement) {
+  constructor(camId = 'main-camera', canvasEl?: HTMLCanvasElement) {
     this.camId = camId;
     this.canvasEl = canvasEl || setUpCanvas();
+    CANVAS = this.canvasEl;
   }
 
   async init() {
     this.model = new Model();
+    MODEL = this.model;
     this.view = await createView(o11s.USE_WEBGPU, this.canvasEl);
     this.canvasEl.addEventListener('click', () => {
       this.canvasEl.requestPointerLock?.();
@@ -38,8 +42,8 @@ export default class Controller{
 
   private controllerLoop = () => {
     debug.perf("controller-loop", () => {
-      debug.log(`Controller ready`);  
-      debug.perf("model-update",()=>this.model.update());
+      debug.log(`Controller ready`);
+      debug.perf("model-update", () => this.model.update());
       debug.log(this.model.getCamera(this.camId)?.position.reduce((prev, val) => prev + val.toFixed(2) + " ", "") || "No camera");
       this.renderLoop();
       requestAnimationFrame(this.controllerLoop);
@@ -50,7 +54,7 @@ export default class Controller{
 
   private renderLoop = () => {
     const separatedObjects = debug.perf('model-objects', () => this.model.getObjectsSeparated());
-    debug.log(`Rendering ${separatedObjects.static.length} static and ${separatedObjects.nonStatic.length} non-static objects.`); 
+    debug.log(`Rendering ${separatedObjects.static.length} static and ${separatedObjects.nonStatic.length} non-static objects.`);
     debug.perf('view-register', () =>
       this.view.registerSceneObjectsSeparated(
         separatedObjects.static,

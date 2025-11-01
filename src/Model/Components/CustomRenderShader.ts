@@ -26,13 +26,13 @@ export interface CustomBufferSpec {
 export class CustomRenderShader implements Component {
     /** Unique identifier for this shader, used for pipeline caching */
     id: string;
-    
+
     /** WGSL vertex shader code */
     vertexShader: string;
-    
+
     /** WGSL fragment shader code */
     fragmentShader: string;
-    
+
     /** 
      * Additional buffer specifications for group 1 bindings.
      * Users should update the `data` field to change buffer contents.
@@ -55,6 +55,9 @@ export class CustomRenderShader implements Component {
     // Component interface requires at least start or update
     start() {
         // No initialization needed for shaders
+    }
+    update() {
+        // should be overridden by user if needed
     }
 }
 

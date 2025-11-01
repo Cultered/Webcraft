@@ -133,7 +133,7 @@ export class WebGPUView extends BaseView {
 
                 const pipelineDescriptor = {
                     vertex: { module: shaderModule, entryPoint: 'vertex_main', buffers: vertexBuffers },
-                    fragment: { module: shaderModule, entryPoint: 'fragment_main', targets: [{ format: navigator.gpu.getPreferredCanvasFormat(), blend: { color: { srcFactor: 'one', dstFactor: 'one-minus-src-alpha' }, alpha: { srcFactor: 'one', dstFactor: 'one-minus-src-alpha' } } }] },
+                    fragment: { module: shaderModule, entryPoint: 'fragment_main', targets: [{ format: navigator.gpu.getPreferredCanvasFormat(), blend: { color: { srcFactor: 'src-alpha', dstFactor: 'one-minus-src-alpha', operation: 'add' }, alpha: { srcFactor: 'src-alpha', dstFactor: 'one-minus-src-alpha', operation: 'add' } } }] },
                     primitive: { topology: 'triangle-list', cullMode: 'back' },
                     layout: device.createPipelineLayout({ bindGroupLayouts: [bindGroupLayout] }),
                     multisample: { count: this.sampleCount },
@@ -281,7 +281,7 @@ ${customShader.fragmentShader}
                 const group1Entries = customShader.bufferSpecs.map(spec => ({
                     binding: spec.binding,
                     visibility: spec.visibility,
-                    buffer: { 
+                    buffer: {
                         type: spec.type as GPUBufferBindingType
                     }
                 }));
@@ -292,7 +292,7 @@ ${customShader.fragmentShader}
 
                 // Create pipeline layout with both bind groups
                 const pipelineLayout = this.device.createPipelineLayout({
-                    bindGroupLayouts: group1Entries.length > 0 
+                    bindGroupLayouts: group1Entries.length > 0
                         ? [bindGroupLayout0, bindGroupLayout1]
                         : [bindGroupLayout0]
                 });
@@ -312,29 +312,29 @@ ${customShader.fragmentShader}
 
                 // Create custom render pipeline
                 const pipelineDescriptor: GPURenderPipelineDescriptor = {
-                    vertex: { 
-                        module: shaderModule, 
-                        entryPoint: 'vertex_main', 
-                        buffers: vertexBuffers 
+                    vertex: {
+                        module: shaderModule,
+                        entryPoint: 'vertex_main',
+                        buffers: vertexBuffers
                     },
-                    fragment: { 
-                        module: shaderModule, 
-                        entryPoint: 'fragment_main', 
-                        targets: [{ 
+                    fragment: {
+                        module: shaderModule,
+                        entryPoint: 'fragment_main',
+                        targets: [{
                             format: navigator.gpu.getPreferredCanvasFormat(),
-                            blend: { 
-                                color: { srcFactor: 'one', dstFactor: 'one-minus-src-alpha' }, 
-                                alpha: { srcFactor: 'one', dstFactor: 'one-minus-src-alpha' } 
-                            } 
-                        }] 
+                            blend: {
+                                color: { srcFactor: 'src-alpha', dstFactor: 'one-minus-src-alpha', operation: 'add' },
+                                alpha: { srcFactor: 'src-alpha', dstFactor: 'one-minus-src-alpha', operation: 'add' }
+                            }
+                        }]
                     },
                     primitive: { topology: 'triangle-list', cullMode: 'back' },
                     layout: pipelineLayout,
                     multisample: { count: this.sampleCount },
-                    depthStencil: { 
-                        format: 'depth24plus', 
-                        depthWriteEnabled: true, 
-                        depthCompare: 'less' 
+                    depthStencil: {
+                        format: 'depth24plus',
+                        depthWriteEnabled: true,
+                        depthCompare: 'less'
                     },
                 };
 
@@ -344,27 +344,27 @@ ${customShader.fragmentShader}
                 // Create GPU buffers and bind group for group 1 if there are buffer specs
                 if (group1Entries.length > 0) {
                     const bufferMap = new Map<number, GPUBuffer>();
-                    
+
                     // Create GPU buffers for each buffer spec
                     for (const spec of customShader.bufferSpecs) {
                         const buffer = this.device.createBuffer({
                             size: spec.size,
                             usage: GPUBufferUsage.COPY_DST | (
                                 spec.type === 'uniform' ? GPUBufferUsage.UNIFORM :
-                                spec.type === 'storage' ? GPUBufferUsage.STORAGE :
-                                GPUBufferUsage.STORAGE // read-only-storage also uses STORAGE
+                                    spec.type === 'storage' ? GPUBufferUsage.STORAGE :
+                                        GPUBufferUsage.STORAGE // read-only-storage also uses STORAGE
                             )
                         });
-                        
+
                         // Initialize buffer with data
                         this.updateCustomBuffer(buffer, spec);
-                        
+
                         bufferMap.set(spec.binding, buffer);
                     }
-                    
+
                     // Store buffer map for this shader
                     this.customShaderBuffers.set(customShader.id, bufferMap);
-                    
+
                     // Create bind group with the created buffers
                     const bindGroup1 = this.device.createBindGroup({
                         layout: bindGroupLayout1,
@@ -373,7 +373,7 @@ ${customShader.fragmentShader}
                             resource: { buffer: bufferMap.get(spec.binding)! }
                         }))
                     });
-                    
+
                     this.customShaderBindGroups.set(customShader.id, [bindGroup1]);
                 }
 
@@ -473,7 +473,7 @@ ${customShader.fragmentShader}
             for (const entity of this.customShaderObjects) {
                 const customShader = entity.getComponent(CustomRenderShader);
                 const meshComponent = entity.getComponent(MeshComponent);
-                
+
                 if (!customShader || !meshComponent) continue;
 
                 const pipeline = this.renderPipelines.get(`custom-${customShader.id}`);
@@ -772,7 +772,7 @@ ${customShader.fragmentShader}
         for (let i = 0; i < this.customShaderObjects.length; i++) {
             const entity = this.customShaderObjects[i];
             const storageIndex = baseIndex + i;
-            
+
             // Store the index for this entity
             this.customShaderObjectIndices.set(entity.id, storageIndex);
 
@@ -792,15 +792,15 @@ ${customShader.fragmentShader}
      */
     private updateCustomBuffer(buffer: GPUBuffer, spec: CustomBufferSpec): void {
         if (!this.device) return;
-        
+
         // Convert data to ArrayBuffer if needed
         let data: ArrayBuffer;
         if (spec.data instanceof ArrayBuffer) {
             data = spec.data;
         } else {
-            data = spec.data.buffer.slice(spec.data.byteOffset, spec.data.byteOffset + spec.data.byteLength);
+            data = spec.data.buffer.slice(spec.data.byteOffset, spec.data.byteOffset + spec.data.byteLength) as ArrayBuffer;
         }
-        
+
         this.device.queue.writeBuffer(buffer, 0, data);
     }
 
