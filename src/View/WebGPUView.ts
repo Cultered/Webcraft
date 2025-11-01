@@ -310,12 +310,25 @@ ${customShader.fragmentShader}
                     }
                 ] as GPUVertexBufferLayout[];
 
+                // Default alpha blending configuration
+                const defaultBlend: GPUBlendState = {
+                    color: {
+                        srcFactor: 'src-alpha' as GPUBlendFactor,
+                        dstFactor: 'one-minus-src-alpha' as GPUBlendFactor,
+                        operation: 'add' as GPUBlendOperation
+                    },
+                    alpha: {
+                        srcFactor: 'src-alpha' as GPUBlendFactor,
+                        dstFactor: 'one-minus-src-alpha' as GPUBlendFactor,
+                        operation: 'add' as GPUBlendOperation
+                    }
+                };
+
                 // Get pipeline settings from shader or use defaults
                 const cullMode = customShader.pipelineSettings?.cullMode ?? 'back';
-                const blend = customShader.pipelineSettings?.blend ?? {
-                    color: { srcFactor: 'src-alpha' as GPUBlendFactor, dstFactor: 'one-minus-src-alpha' as GPUBlendFactor, operation: 'add' as GPUBlendOperation },
-                    alpha: { srcFactor: 'src-alpha' as GPUBlendFactor, dstFactor: 'one-minus-src-alpha' as GPUBlendFactor, operation: 'add' as GPUBlendOperation }
-                };
+                // Handle blend: undefined = default alpha blending, null = no blending, otherwise use provided value
+                const blendSetting = customShader.pipelineSettings?.blend;
+                const blend = blendSetting === undefined ? defaultBlend : (blendSetting === null ? undefined : blendSetting);
                 const depthWriteEnabled = customShader.pipelineSettings?.depthWriteEnabled ?? true;
                 const depthCompare = customShader.pipelineSettings?.depthCompare ?? 'less';
 

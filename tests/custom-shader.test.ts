@@ -160,4 +160,18 @@ fn fragment_main(fragData: VertexOut) -> @location(0) vec4f {
         expect(customShader.pipelineSettings?.depthCompare).toBeUndefined();
         expect(customShader.pipelineSettings?.blend).toBeUndefined();
     });
+
+    it('should support null blend to disable blending (opaque rendering)', () => {
+        const customShader = new CustomRenderShader(
+            'opaque-shader',
+            'vertex code',
+            'fragment code',
+            [],
+            {
+                blend: null  // Explicitly disable blending
+            }
+        );
+
+        expect(customShader.pipelineSettings?.blend).toBeNull();
+    });
 });

@@ -23,8 +23,13 @@ export interface CustomBufferSpec {
 export interface PipelineSettings {
     /** Cull mode for triangle culling (default: 'back') */
     cullMode?: GPUCullMode;
-    /** Blending configuration (default: alpha blending when omitted) */
-    blend?: GPUBlendState;
+    /** 
+     * Blending configuration. 
+     * - undefined/omitted: uses default alpha blending
+     * - null: disables blending (opaque rendering)
+     * - GPUBlendState: custom blend configuration
+     */
+    blend?: GPUBlendState | null;
     /** Whether depth writes are enabled (default: true) */
     depthWriteEnabled?: boolean;
     /** Depth comparison function (default: 'less') */

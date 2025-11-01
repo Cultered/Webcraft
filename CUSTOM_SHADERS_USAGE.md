@@ -338,9 +338,9 @@ const customShader = new CustomRenderShader(
   - `'never'`: Never pass
 
 - **blend** (optional): Blending configuration for transparency
-  - Default: Alpha blending enabled with `src-alpha` and `one-minus-src-alpha`
-  - Set to `undefined` or omit for opaque rendering
-  - Custom blend states can be specified using WebGPU's `GPUBlendState` structure
+  - Omitted/undefined: Uses default alpha blending (`src-alpha`, `one-minus-src-alpha`)
+  - `null`: Disables blending for opaque rendering
+  - Custom blend state: Specify your own `GPUBlendState` for custom blending behavior
 
 ### Example: Transparent Shader
 
@@ -370,7 +370,7 @@ const opaqueShader = new CustomRenderShader(
         cullMode: 'back',
         depthWriteEnabled: true,
         depthCompare: 'less',
-        blend: undefined  // Disable blending for opaque objects
+        blend: null  // Disable blending for opaque objects
     }
 );
 ```
