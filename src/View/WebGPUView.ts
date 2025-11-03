@@ -310,6 +310,28 @@ ${customShader.fragmentShader}
                     }
                 ] as GPUVertexBufferLayout[];
 
+                // Default alpha blending configuration
+                const defaultBlend: GPUBlendState = {
+                    color: {
+                        srcFactor: 'src-alpha' as GPUBlendFactor,
+                        dstFactor: 'one-minus-src-alpha' as GPUBlendFactor,
+                        operation: 'add' as GPUBlendOperation
+                    },
+                    alpha: {
+                        srcFactor: 'src-alpha' as GPUBlendFactor,
+                        dstFactor: 'one-minus-src-alpha' as GPUBlendFactor,
+                        operation: 'add' as GPUBlendOperation
+                    }
+                };
+
+                // Get pipeline settings from shader or use defaults
+                const cullMode = customShader.pipelineSettings?.cullMode ?? 'back';
+                // Handle blend: undefined = default alpha blending, null = no blending, otherwise use provided value
+                const blendSetting = customShader.pipelineSettings?.blend;
+                const blend = blendSetting === undefined ? defaultBlend : (blendSetting === null ? undefined : blendSetting);
+                const depthWriteEnabled = customShader.pipelineSettings?.depthWriteEnabled ?? true;
+                const depthCompare = customShader.pipelineSettings?.depthCompare ?? 'less';
+
                 // Create custom render pipeline
                 const pipelineDescriptor: GPURenderPipelineDescriptor = {
                     vertex: {
@@ -322,19 +344,16 @@ ${customShader.fragmentShader}
                         entryPoint: 'fragment_main',
                         targets: [{
                             format: navigator.gpu.getPreferredCanvasFormat(),
-                            blend: {
-                                color: { srcFactor: 'src-alpha', dstFactor: 'one-minus-src-alpha', operation: 'add' },
-                                alpha: { srcFactor: 'src-alpha', dstFactor: 'one-minus-src-alpha', operation: 'add' }
-                            }
+                            blend: blend
                         }]
                     },
-                    primitive: { topology: 'triangle-list', cullMode: 'back' },
+                    primitive: { topology: 'triangle-list', cullMode: cullMode },
                     layout: pipelineLayout,
                     multisample: { count: this.sampleCount },
                     depthStencil: {
                         format: 'depth24plus',
-                        depthWriteEnabled: true,
-                        depthCompare: 'less'
+                        depthWriteEnabled: depthWriteEnabled,
+                        depthCompare: depthCompare
                     },
                 };
 

@@ -16,9 +16,30 @@ export interface CustomBufferSpec {
 }
 
 /**
+ * Optional pipeline settings for custom render shaders.
+ * Uses WebGPU types (GPUCullMode, GPUBlendState, GPUCompareFunction) which are
+ * globally available via @webgpu/types package.
+ */
+export interface PipelineSettings {
+    /** Cull mode for triangle culling (default: 'back') */
+    cullMode?: GPUCullMode;
+    /** 
+     * Blending configuration. 
+     * - undefined/omitted: uses default alpha blending
+     * - null: disables blending (opaque rendering)
+     * - GPUBlendState: custom blend configuration
+     */
+    blend?: GPUBlendState | null;
+    /** Whether depth writes are enabled (default: true) */
+    depthWriteEnabled?: boolean;
+    /** Depth comparison function (default: 'less') */
+    depthCompare?: GPUCompareFunction;
+}
+
+/**
  * Component for custom shaders in WebGPU backend.
  * Contains vertex and fragment shader code, additional buffer specifications,
- * and an ID for pipeline caching.
+ * optional pipeline settings, and an ID for pipeline caching.
  * 
  * WebGPU-specific operations (buffer creation, updates) are handled internally
  * by the WebGPUView. Users only need to update the `data` field of buffers.
@@ -40,16 +61,25 @@ export class CustomRenderShader implements Component {
      */
     public bufferSpecs: CustomBufferSpec[];
 
+    /**
+     * Optional pipeline settings (cullMode, blend, depthWriteEnabled, depthCompare).
+     * If not specified, defaults are used: cullMode='back', blend=alpha blending,
+     * depthWriteEnabled=true, depthCompare='less'.
+     */
+    public pipelineSettings?: PipelineSettings;
+
     constructor(
         id: string,
         vertexShader: string,
         fragmentShader: string,
-        bufferSpecs: CustomBufferSpec[] = []
+        bufferSpecs: CustomBufferSpec[] = [],
+        pipelineSettings?: PipelineSettings
     ) {
         this.id = id;
         this.vertexShader = vertexShader;
         this.fragmentShader = fragmentShader;
         this.bufferSpecs = bufferSpecs;
+        this.pipelineSettings = pipelineSettings;
     }
 
     // Component interface requires at least start or update

@@ -58,7 +58,17 @@ fn fragment_main(fragData: VertexOut) -> @location(0) vec4f {
 const customShader = new CustomRenderShader(
     'normal-visualizer',  // Unique shader ID
     vertexShader,
-    fragmentShader
+    fragmentShader,
+    [],                   // Optional: additional buffers (empty array if none)
+    {                     // Optional: pipeline settings
+        cullMode: 'back',           // 'none', 'front', or 'back' (default: 'back')
+        depthWriteEnabled: true,    // default: true
+        depthCompare: 'less',       // default: 'less'
+        blend: {                    // default: alpha blending
+            color: { srcFactor: 'src-alpha', dstFactor: 'one-minus-src-alpha', operation: 'add' },
+            alpha: { srcFactor: 'src-alpha', dstFactor: 'one-minus-src-alpha', operation: 'add' }
+        }
+    }
 );
 ```
 
@@ -287,7 +297,85 @@ Pipelines are cached by shader ID. Multiple objects can share the same shader ID
 - Keep the number of unique custom shaders reasonable
 - Consider using regular batched rendering for objects that don't need custom shaders
 
+## Pipeline Settings
+
+You can customize the rendering pipeline behavior using the optional `pipelineSettings` parameter:
+
+```typescript
+const customShader = new CustomRenderShader(
+    'my-shader',
+    vertexShader,
+    fragmentShader,
+    [],  // buffer specs
+    {    // pipeline settings
+        cullMode: 'none',           // Disable backface culling
+        depthWriteEnabled: false,   // Disable depth writes (useful for transparent objects)
+        depthCompare: 'less-equal', // Change depth comparison
+        blend: null                 // Disable blending (opaque rendering)
+    }
+);
+```
+
+### Available Pipeline Settings
+
+- **cullMode** (optional): Controls triangle culling
+  - `'none'`: No culling, render both sides
+  - `'front'`: Cull front-facing triangles (counter-clockwise when viewed from camera)
+  - `'back'`: Cull back-facing triangles (clockwise when viewed from camera) (default)
+
+- **depthWriteEnabled** (optional): Whether to write to the depth buffer
+  - `true`: Enable depth writes (default)
+  - `false`: Disable depth writes (useful for transparent objects rendered after opaque ones)
+
+- **depthCompare** (optional): Depth comparison function
+  - `'less'`: Pass if fragment is closer (default)
+  - `'less-equal'`: Pass if fragment is closer or equal
+  - `'greater'`: Pass if fragment is farther
+  - `'greater-equal'`: Pass if fragment is farther or equal
+  - `'equal'`: Pass if fragment is at same depth
+  - `'not-equal'`: Pass if fragment is at different depth
+  - `'always'`: Always pass
+  - `'never'`: Never pass
+
+- **blend** (optional): Blending configuration for transparency
+  - Omitted/undefined: Uses default alpha blending (`src-alpha`, `one-minus-src-alpha`)
+  - `null`: Disables blending for opaque rendering
+  - Custom blend state: Specify your own `GPUBlendState` for custom blending behavior
+
+### Example: Transparent Shader
+
+```typescript
+const transparentShader = new CustomRenderShader(
+    'transparent-shader',
+    vertexShader,
+    fragmentShader,
+    [],
+    {
+        cullMode: 'none',           // Render both sides
+        depthWriteEnabled: false,   // Don't write to depth buffer
+        depthCompare: 'less'        // Still respect existing depth
+    }
+);
+```
+
+### Example: Opaque Shader (No Blending)
+
+```typescript
+const opaqueShader = new CustomRenderShader(
+    'opaque-shader',
+    vertexShader,
+    fragmentShader,
+    [],
+    {
+        cullMode: 'back',
+        depthWriteEnabled: true,
+        depthCompare: 'less',
+        blend: null  // Disable blending for opaque objects
+    }
+);
+```
+
 ## P.S
 
-- Static objects can have custom shaders, but as they do not recieve updates, any kind of additional buffers will not either, unless another non-static object also has the shader as one of the components.
-- Other pipeline settings like culling mode will be added to the CustomRenderShader, but not right now
+- Static objects can have custom shaders, but as they do not receive updates, any kind of additional buffers will not either, unless another non-static object also has the shader as one of the components.
+- All pipeline settings are optional. If not specified, sensible defaults are used (cullMode='back', alpha blending enabled, depthWriteEnabled=true, depthCompare='less').
