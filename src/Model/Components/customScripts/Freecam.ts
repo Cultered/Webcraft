@@ -1,10 +1,10 @@
 
-import { vec4, vec4Add, vec4Neg, vec4Scale, forward, right, up } from '../../misc/vec4';
-import * as M from '../../misc/mat4';
-import { Entity } from '../Entity';
-import type { Component } from './Component';
-import debug from '../../Debug/Debug';
-import { DELTA_TIME } from '../../Controller/Controller';
+import { vec4, vec4Add, vec4Neg, vec4Scale, forward, right, up } from '../../../misc/vec4';
+import * as M from '../../../misc/mat4';
+import { Entity } from '../../Entity';
+import type { Component } from '../Component';
+import debug from '../../../Debug/Debug';
+import { DELTA_TIME } from '../../../Controller/Controller';
 
 export default class Freecam implements Component {
   private keys: Set<string> = new Set();

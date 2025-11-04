@@ -34,6 +34,47 @@ export const LOD_MESH: Mesh = {
             2, 0, 5, 1, 2, 5, 3, 1, 5, 0, 3, 5,
         ])
     }
+
+    export function generatePlaneMesh(size: number) {
+        const hs = size / 2; // half size
+        
+        // Four vertices for a plane in the XZ plane (Y=0)
+        const vertices = [
+            -hs, 0, -hs,  // bottom-left
+             hs, 0, -hs,  // bottom-right
+             hs, 0,  hs,  // top-right
+            -hs, 0,  hs   // top-left
+        ];
+
+        // All normals point up (positive Y)
+        const normals = [
+            0, 1, 0,
+            0, 1, 0,
+            0, 1, 0,
+            0, 1, 0
+        ];
+
+        // UV coordinates map the full texture to the plane
+        const uvs = [
+            0, 0,  // bottom-left
+            1, 0,  // bottom-right
+            1, 1,  // top-right
+            0, 1   // top-left
+        ];
+
+        // Two triangles to form the plane
+        const indices = [
+            1, 0, 2,  // first triangle
+            2, 0, 3   // second triangle
+        ];
+
+        return {
+            vertices: new Float32Array(vertices),
+            normals: new Float32Array(normals),
+            uvs: new Float32Array(uvs),
+            indices: new Uint16Array(indices),
+        };
+    }
 // Sphere generation by subdividing an octahedron.
 export function generateSphereMesh(subdivisions: number, radius: number) {
     subdivisions = Math.max(0, Math.floor(subdivisions));

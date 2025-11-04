@@ -1,6 +1,6 @@
-import CustomRenderShader from './CustomRenderShader';
-import { CANVAS } from '../../Controller/Controller';
-import { MODEL } from '../../Controller/Controller';
+import CustomRenderShader from '../CustomRenderShader';
+import { CANVAS } from '../../../Controller/Controller';
+import { MODEL } from '../../../Controller/Controller';
 const u_time = new Float32Array([Date.now() / 1000 % 1000]);
 let x = 0;
 let y = 0;
@@ -63,7 +63,7 @@ fn fragment_main(fragData: VertexOut) -> @location(0) vec4f {
 
   
     // Simple directional light
-    let lightDir = normalize(vec3f(1.0, 1.0, 0.0));
+    let lightDir = normalize(vec3f(1.0, 1.0, -1.0));
     let lightColor = vec3f(1.0, 1.0, 1.0);
     let ambientColor = vec3f(0.2, 0.2, 0.2);
     

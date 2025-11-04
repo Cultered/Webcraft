@@ -9,6 +9,8 @@ import CustomRenderShader, { type CustomBufferSpec } from '../Model/Components/C
 
 
 export class WebGPUView extends BaseView {
+    public depthView?: GPUTextureView;
+
     private device?: GPUDevice;
     private context?: GPUCanvasContext;
     private depthTexture?: GPUTexture;
@@ -433,6 +435,7 @@ ${customShader.fragmentShader}
         const swapView = this.context.getCurrentTexture().createView();
         const msaaView = this.msaaColorTexture!.createView();
 
+        this.depthView = this.depthTexture!.createView();
         const renderPassDescriptor: GPURenderPassDescriptor = {
             colorAttachments: [{
                 view: msaaView,
@@ -441,7 +444,7 @@ ${customShader.fragmentShader}
                 storeOp: 'store',
             }],
             depthStencilAttachment: {
-                view: this.depthTexture!.createView(),
+                view: this.depthView,
                 depthLoadOp: 'clear',
                 depthClearValue: 1.0,
                 depthStoreOp: 'store',

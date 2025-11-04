@@ -1,7 +1,7 @@
-import type { Component } from './Component';
-import { Entity } from '../Entity';
-import * as M from '../../misc/mat4';
-import { DELTA_TIME } from '../../Controller/Controller';
+import type { Component } from '../Component';
+import { Entity } from '../../Entity';
+import * as M from '../../../misc/mat4';
+import { DELTA_TIME } from '../../../Controller/Controller';
 
 export class Rotator implements Component {
     speed: number;

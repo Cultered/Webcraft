@@ -1,5 +1,5 @@
 import Model from '../Model/Model';
-import { createView } from '../View/View';
+import { createView, WebGPUView } from '../View/View';
 import { BaseView } from '../View/BaseView';
 import debug from '../Debug/Debug';
 import { o11s } from '../config/config';
@@ -8,6 +8,7 @@ import { setUpCanvas } from '../misc/setUpCanvas';
 export let DELTA_TIME = 0;
 export let CANVAS: HTMLCanvasElement;
 export let MODEL: Model;
+export let DEPTH_VIEW: GPUTextureView | undefined;
 
 export default class Controller {
   public model!: Model;
@@ -46,6 +47,7 @@ export default class Controller {
       debug.perf("model-update", () => this.model.update());
       debug.log(this.model.getCamera(this.camId)?.position.reduce((prev, val) => prev + val.toFixed(2) + " ", "") || "No camera");
       this.renderLoop();
+      if(this.view instanceof WebGPUView) DEPTH_VIEW = this.view.depthView;
       requestAnimationFrame(this.controllerLoop);
       debug.flush();
     });
