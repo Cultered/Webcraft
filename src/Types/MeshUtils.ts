@@ -450,3 +450,234 @@ function computeFaceNormals(vertices: number[], indices: number[], normals: numb
         }
     }
 }
+
+/**
+ * Generate a texture visualization of UV coordinates from an OBJ file
+ * 
+ * Creates an ImageData representing the UV layout of a 3D model. The texture shows
+ * the UV islands with vertex colors (if available) or default colors with triangle 
+ * edges drawn for visualization. Useful for debugging UV unwrapping and creating 
+ * UV layout templates.
+ * 
+ * @param objContent - The content of the .obj file as a string
+ * @param textureSize - Size of the generated texture (width and height in pixels), default 1024
+ * @param backgroundColor - Background color [r, g, b, a] (0-255), default white [255, 255, 255, 255]
+ * @param lineColor - Color for triangle edges [r, g, b, a] (0-255), default black [0, 0, 0, 255]
+ * @param fillColor - Fill color for UV triangles when no vertex colors [r, g, b, a] (0-255), default semi-transparent [100, 100, 255, 128]
+ * @returns ImageData that can be used as a texture
+ * 
+ * @example
+ * ```typescript
+ * import { generateUVTextureFromOBJ } from './Types/MeshUtils';
+ * import { loadOBJFile } from './misc/loadFiles';
+ * 
+ * // Load OBJ and generate UV texture
+ * const objContent = await loadOBJFile('/models/character.obj');
+ * const uvTexture = generateUVTextureFromOBJ(objContent, 1024);
+ * 
+ * // Add to view as a texture
+ * view.addTexture('uv-layout', uvTexture);
+ * 
+ * // Use on a plane to visualize
+ * const plane = generatePlaneMesh(10);
+ * const planeEntity = new Entity('uv-preview', vec4(0, 0, 0));
+ * planeEntity.addComponent(new MeshComponent({id: 'uv-plane', ...plane}, 'uv-layout'));
+ * ```
+ */
+export function generateUVTextureFromOBJ(
+    objContent: string,
+    textureSize: number = 1024,
+    backgroundColor: [number, number, number, number] = [255, 255, 255, 255],
+    lineColor: [number, number, number, number] = [0, 0, 0, 255],
+    fillColor: [number, number, number, number] = [100, 100, 255, 128]
+): ImageData {
+    const canvas = document.createElement('canvas');
+    canvas.width = textureSize;
+    canvas.height = textureSize;
+    const ctx = canvas.getContext('2d');
+    
+    if (!ctx) {
+        throw new Error('Failed to get 2D context for UV texture generation');
+    }
+    
+    // Fill background
+    ctx.fillStyle = `rgba(${backgroundColor[0]}, ${backgroundColor[1]}, ${backgroundColor[2]}, ${backgroundColor[3] / 255})`;
+    ctx.fillRect(0, 0, textureSize, textureSize);
+    
+    // Parse OBJ to extract vertices (with colors), UV coordinates and faces
+    const lines = objContent.split('\n').map(line => line.trim()).filter(line => line && !line.startsWith('#'));
+    const vertices: number[][] = [];
+    const vertexColors: [number, number, number][] = [];
+    const uvs: [number, number][] = [];
+    const faces: Array<{vertexIdx: number[], uvIdx: number[]}> = [];
+    let hasVertexColors = false;
+    
+    for (const line of lines) {
+        const parts = line.split(/\s+/);
+        const type = parts[0];
+        
+        if (type === 'v') {
+            // Parse vertex position and optional color (format: v x y z [r g b])
+            if (parts.length >= 4) {
+                vertices.push([parseFloat(parts[1]), parseFloat(parts[2]), parseFloat(parts[3])]);
+                
+                if (parts.length >= 7) {
+                    // Vertex has color information
+                    hasVertexColors = true;
+                    const r = Math.floor(parseFloat(parts[4]) * 255);
+                    const g = Math.floor(parseFloat(parts[5]) * 255);
+                    const b = Math.floor(parseFloat(parts[6]) * 255);
+                    vertexColors.push([r, g, b]);
+                } else {
+                    // No color, use default
+                    vertexColors.push([fillColor[0], fillColor[1], fillColor[2]]);
+                }
+            }
+        } else if (type === 'vt') {
+            // Parse UV coordinates
+            if (parts.length >= 3) {
+                uvs.push([parseFloat(parts[1]), parseFloat(parts[2])]);
+            }
+        } else if (type === 'f') {
+            // Parse face and extract vertex and UV indices
+            if (parts.length >= 4) {
+                const faceVertices: number[] = [];
+                const faceUVs: number[] = [];
+                
+                for (let i = 1; i < parts.length; i++) {
+                    const vertexData = parts[i].split('/');
+                    const vIdx = parseInt(vertexData[0]) - 1;
+                    faceVertices.push(vIdx);
+                    
+                    if (vertexData[1] && vertexData[1] !== '') {
+                        faceUVs.push(parseInt(vertexData[1]) - 1); // Convert to 0-based index
+                    }
+                }
+                
+                // Triangulate if needed (simple fan triangulation)
+                if (faceUVs.length >= 3) {
+                    for (let i = 1; i < faceUVs.length - 1; i++) {
+                        faces.push({
+                            vertexIdx: [faceVertices[0], faceVertices[i], faceVertices[i + 1]],
+                            uvIdx: [faceUVs[0], faceUVs[i], faceUVs[i + 1]]
+                        });
+                    }
+                }
+            }
+        }
+    }
+    
+    if (uvs.length === 0) {
+        console.warn('No UV coordinates found in OBJ file');
+    }
+    
+    // Helper function to convert UV coordinates (-3 to 3) to canvas coordinates
+    const uvToCanvas = (u: number, v: number): [number, number] => {
+        // Map from [-3, 3] range to [0, textureSize]
+        // Normalize: (value + 3) / 6 gives us 0-1 range
+        const normalizedU = (u) * 3 -0.4;
+        const normalizedV = (v) * 3+.3;
+        
+        // Flip V coordinate because canvas Y is top-down, UV V is bottom-up
+        return [normalizedU * textureSize, (1 - normalizedV) * textureSize];
+    };
+    
+    // Draw filled triangles with vertex colors or gradient
+    for (const face of faces) {
+        if (face.uvIdx.length === 3) {
+            const uv0 = uvs[face.uvIdx[0]];
+            const uv1 = uvs[face.uvIdx[1]];
+            const uv2 = uvs[face.uvIdx[2]];
+            
+            if (uv0 && uv1 && uv2) {
+                const [x0, y0] = uvToCanvas(uv0[0], uv0[1]);
+                const [x1, y1] = uvToCanvas(uv1[0], uv1[1]);
+                const [x2, y2] = uvToCanvas(uv2[0], uv2[1]);
+                
+                if (hasVertexColors && face.vertexIdx.length === 3) {
+                    // Use vertex colors with gradient
+                    const color0 = vertexColors[face.vertexIdx[0]];
+                    const color1 = vertexColors[face.vertexIdx[1]];
+                    const color2 = vertexColors[face.vertexIdx[2]];
+                    
+                    // Average color for this triangle
+                    const avgR = Math.floor((color0[0] + color1[0] + color2[0]) / 3);
+                    const avgG = Math.floor((color0[1] + color1[1] + color2[1]) / 3);
+                    const avgB = Math.floor((color0[2] + color1[2] + color2[2]) / 3);
+                    
+                    ctx.fillStyle = `rgba(${avgR}, ${avgG}, ${avgB}, ${fillColor[3] / 255})`;
+                } else {
+                    // Use default fill color
+                    ctx.fillStyle = `rgba(${fillColor[0]}, ${fillColor[1]}, ${fillColor[2]}, ${fillColor[3] / 255})`;
+                }
+                
+                ctx.beginPath();
+                ctx.moveTo(x0, y0);
+                ctx.lineTo(x1, y1);
+                ctx.lineTo(x2, y2);
+                ctx.closePath();
+                ctx.fill();
+            }
+        }
+    }
+    
+    // Draw triangle edges
+    // ctx.strokeStyle = `rgba(${lineColor[0]}, ${lineColor[1]}, ${lineColor[2]}, ${lineColor[3] / 255})`;
+    // ctx.lineWidth = 2;
+    
+    // for (const face of faces) {
+    //     if (face.uvIdx.length === 3) {
+    //         const uv0 = uvs[face.uvIdx[0]];
+    //         const uv1 = uvs[face.uvIdx[1]];
+    //         const uv2 = uvs[face.uvIdx[2]];
+            
+    //         if (uv0 && uv1 && uv2) {
+    //             const [x0, y0] = uvToCanvas(uv0[0], uv0[1]);
+    //             const [x1, y1] = uvToCanvas(uv1[0], uv1[1]);
+    //             const [x2, y2] = uvToCanvas(uv2[0], uv2[1]);
+                
+    //             ctx.beginPath();
+    //             ctx.moveTo(x0, y0);
+    //             ctx.lineTo(x1, y1);
+    //             ctx.lineTo(x2, y2);
+    //             ctx.closePath();
+    //             ctx.stroke();
+    //         }
+    //     }
+    // }
+    
+    // Draw grid lines for reference (representing the -3 to 3 range)
+    ctx.strokeStyle = 'rgba(200, 200, 200, 0.5)';
+    ctx.lineWidth = 1;
+    const gridDivisions = 6; // One division per unit in -3 to 3 range
+    for (let i = 0; i <= gridDivisions; i++) {
+        const pos = (i / gridDivisions) * textureSize;
+        // Vertical lines
+        ctx.beginPath();
+        ctx.moveTo(pos, 0);
+        ctx.lineTo(pos, textureSize);
+        ctx.stroke();
+        // Horizontal lines
+        ctx.beginPath();
+        ctx.moveTo(0, pos);
+        ctx.lineTo(textureSize, pos);
+        ctx.stroke();
+    }
+    
+    // Draw center lines (0,0 in UV space) more prominently
+    ctx.strokeStyle = 'rgba(100, 100, 100, 0.8)';
+    ctx.lineWidth = 2;
+    const center = textureSize / 2; // This represents UV (0, 0)
+    // Vertical center line (U = 0)
+    ctx.beginPath();
+    ctx.moveTo(center, 0);
+    ctx.lineTo(center, textureSize);
+    ctx.stroke();
+    // Horizontal center line (V = 0)
+    ctx.beginPath();
+    ctx.moveTo(0, center);
+    ctx.lineTo(textureSize, center);
+    ctx.stroke();
+    
+    return ctx.getImageData(0, 0, textureSize, textureSize);
+}
