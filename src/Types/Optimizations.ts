@@ -5,5 +5,4 @@ export type Optimizations = {
     LOD_DISTANCE: number
     CPU_SOFT_FRUSTUM_CULLING: boolean
     CPU_LOD: boolean
-    USE_WEBGPU:boolean
 };

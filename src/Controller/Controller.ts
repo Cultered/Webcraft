@@ -1,6 +1,5 @@
 import Model from '../Model/Model';
 import { createView, WebGPUView } from '../View/View';
-import { BaseView } from '../View/BaseView';
 import debug from '../Debug/Debug';
 import { o11s } from '../config/config';
 import { setUpCanvas } from '../misc/setUpCanvas';
@@ -12,7 +11,7 @@ export let DEPTH_VIEW: GPUTextureView | undefined;
 
 export default class Controller {
   public model!: Model;
-  public view!: BaseView;
+  public view!: WebGPUView;
   private camId: string;
   private lastTime: number = performance.now();
   private canvasEl!: HTMLCanvasElement;
@@ -23,11 +22,11 @@ export default class Controller {
     this.canvasEl = canvasEl || setUpCanvas();
     CANVAS = this.canvasEl;
   }
-
+  
   async init() {
     this.model = new Model();
     MODEL = this.model;
-    this.view = await createView(o11s.USE_WEBGPU, this.canvasEl);
+    this.view = await createView(this.canvasEl);
     this.canvasEl.addEventListener('click', () => {
       this.canvasEl.requestPointerLock?.();
     });

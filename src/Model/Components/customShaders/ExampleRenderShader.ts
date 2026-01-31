@@ -41,10 +41,9 @@ var diffuseTexture: texture_2d<f32>;
 fn vertex_main(in: VertexIn, @builtin(instance_index) i_idx: u32) -> VertexOut {
   var output: VertexOut;
   let model = objectMatrices[i_idx];
-  let wavesPosition = in.position + vec3f(1.0, 0.0, 0.0) * sin(u_time  * 5.0+ in.position.y*5) * 0.1;
-  output.position = projectionMatrix * view * model * vec4f(wavesPosition, 1.0);
+  output.position = projectionMatrix * view * model * vec4f(in.position, 1.0);
   output.uv = in.uv;
-  output.worldPosition = (model * vec4f(wavesPosition, 1.0));
+  output.worldPosition = (model * vec4f(in.position, 1.0));
   output.worldNormal = normalize((model * vec4f(in.normal, 0.0)).xyz);
   return output;
 }
@@ -76,15 +75,9 @@ fn fragment_main(fragData: VertexOut) -> @location(0) vec4f {
     
     // Combine ambient and diffuse lighting with texture color
     let finalColor = textureColor * (ambientColor + diffuse);
-    
-  d = length( (vec2f(stx, sty)) );
 
-  let relative = fragData.worldPosition.xyz - cameraPos.xyz;
-  let lr = length(relative);
-  let waves = fract(sqrt(lr)*10-u_time*3);
-  let waveEnd = 1-smoothstep(0.0,10.,lr);
 
-  return vec4f(finalColor,waves*waveEnd*smoothstep(5.0,10.0,lr)+smoothstep(2.0,10.0,lr));
+  return vec4f(finalColor, 1.0);
 }
 `;
 

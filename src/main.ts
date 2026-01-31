@@ -20,7 +20,7 @@ import { MODEL } from './Controller/Controller';
     const mainCam = MODEL.addCamera('main-camera', vec4(0, 0, 0), mat4Rotation(0, Math.PI, 0));
     mainCam.addComponent(new Freecam());
 
-    c.view.addTexture('example-texture', await loadImageData(exampleTextureUrl));//TODO make this a controller function
+    c.view.th.addTexture('example-texture', await loadImageData(exampleTextureUrl));//TODO make this a controller function
 
     // Load the OBJ file
     const monkeObjContent = await loadOBJFile('/monke.obj');
@@ -28,28 +28,20 @@ import { MODEL } from './Controller/Controller';
     
     // Generate UV texture from the OBJ file
     const uvTexture = generateUVTextureFromOBJ(LogoBlueprints, 1024);
-    c.view.addTexture('monke-uv-texture', uvTexture);
+    c.view.th.addTexture('monke-uv-texture', uvTexture);
 
-    const monke = new Entity('monke', vec4(10, 20, 50), undefined, vec4(10, 10, 10, 1), false);
+    const monke = new Entity('monke', vec4(0, 0, 50), undefined, vec4(10, 10, 10, 1), false);
     monke.rotateEuler(0, Math.PI, 0);
-    const monkeMesh = { id: "monkeMesh", ...loadOBJ(LogoBlueprints) };
+    const monkeMesh = { id: "monkeMesh", ...loadOBJ(monkeObjContent) };
     monke.addComponent(new MeshComponent(monkeMesh, "example-texture"));
     MODEL.addEntity(monke);
 
+    const groundPlane = new Entity('groundPlane', vec4(0, -10, 0), undefined, vec4(100, 1, 100, 1), false);
+    groundPlane.addComponent(new MeshComponent({id:'planeMesh', ...generatePlaneMesh(1)}, 'monke-uv-texture'));
+    groundPlane.addComponent(exampleTextureShader);
+    MODEL.addEntity(groundPlane);
 
-    const depthViewPlane = new Entity('depth-view-plane', vec4(-40, 0, 50), undefined, vec4(50, 50, 50, 1), false);
-    depthViewPlane.rotateEuler(-Math.PI / 2, 0, Math.PI);
-    const planeMesh = {"id": "depth-plane", ...generatePlaneMesh(1)};
-    depthViewPlane.addComponent(new MeshComponent(planeMesh, 'example-texture'));
-    depthViewPlane.addComponent(exampleTextureShader);
-    MODEL.addEntity(depthViewPlane);
-    
-    // Create a plane to display the UV texture
-    const uvViewPlane = new Entity('uv-view-plane', vec4(40, 0, 50), undefined, vec4(50, 50, 50, 1), false);
-    uvViewPlane.rotateEuler(-Math.PI / 2, 0, 0);
-    const uvPlaneMesh = {"id": "uv-plane", ...generatePlaneMesh(1)};
-    uvViewPlane.addComponent(new MeshComponent(uvPlaneMesh, 'monke-uv-texture'));
-    MODEL.addEntity(uvViewPlane);
+
 
 
 

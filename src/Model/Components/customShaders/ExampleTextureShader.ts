@@ -42,24 +42,8 @@ const fragmentShader = /*glsl*/`
 
 @fragment
 fn fragment_main(fragData: VertexOut) -> @location(0) vec4f {
-    // Simple directional light
-    let lightDir = normalize(vec3f(1.0, 1.0, -1.0));
-    let lightColor = vec3f(1.0, 1.0, 1.0);
-    let ambientColor = vec3f(0.2, 0.2, 0.2);
-    
-    // Sample texture color
-    let textureColor = textureSample(diffuseTexture, textureSampler, fragData.uv).rgb;
-    
-    // Calculate diffuse lighting using dot product of normal and light direction
-    let dotNL = max(dot(fragData.worldNormal, lightDir), 0.0);
-    let diffuse = lightColor * dotNL;
-    
-    // Combine ambient and diffuse lighting with texture color
-    let finalColor = textureColor * (ambientColor + diffuse);
-    
-
-
-  return vec4f(finalColor,1.);
+  
+  return vec4f(fragData.uv.x, fragData.uv.y, 0.0, 1.0);
 }
 `;
 

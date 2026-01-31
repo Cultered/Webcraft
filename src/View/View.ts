@@ -1,22 +1,18 @@
-import { WebGLView } from './WebGLView';
+
 import { WebGPUView } from './WebGPUView';
 import { BaseView } from './BaseView';
 
 /**
- * Factory function to create the appropriate view implementation
- * @param useWebGPU - Whether to use WebGPU (true) or WebGL (false)
- * @returns A view instance (WebGPUView or WebGLView)
+ * Factory function to create view instances.
+ * 
+ * RIP WebGL you won't be missed.
  */
-export async function createView(useWebGPU: boolean = true,canvasEl: HTMLCanvasElement): Promise<WebGLView | WebGPUView> {
+export async function createView(canvasEl: HTMLCanvasElement): Promise<WebGPUView> {
     let view;
-    if (useWebGPU) {
-        view = new WebGPUView();
-    } else {
-        view = new WebGLView();
-    }
+    view = new WebGPUView();
     await view.init(canvasEl);
     return Promise.resolve(view);
 }
 
-export { WebGLView, WebGPUView };
+export { WebGPUView };
 export type { BaseView };
