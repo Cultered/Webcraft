@@ -7,5 +7,4 @@ export const o11s: Optimizations = {
     LOD_DISTANCE: 1,
     CPU_SOFT_FRUSTUM_CULLING: false,//will probably be deprecated too
     CPU_LOD: false,//will be deprecated
-    USE_WEBGPU: true//WebGL lighting implementation also working
 }

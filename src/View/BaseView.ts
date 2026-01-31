@@ -22,39 +22,4 @@ export abstract class BaseView {
     protected lastCameraKey?: string;
     protected camera: Entity = new Entity('default-camera', V.vec4(), M.mat4(), V.vec4(1, 1, 1, 1));
     protected canvas?: HTMLCanvasElement;
-
-    /**
-     * Initialize the rendering context
-     */
-    public abstract init(canvas: HTMLCanvasElement): Promise<any> | void;
-
-    /**
-     * Render the current scene
-     */
-    public abstract render(): void;
-
-    /**
-     * Register scene objects for rendering
-     */
-
-    /**
-     * Register scene objects separately for static/non-static optimization
-     */
-    public abstract registerSceneObjectsSeparated(staticObjects: Entity[], nonStaticObjects: Entity[], updateVertices: boolean): void;
-
-    /**
-     * Register a camera for the scene
-     */
-    public abstract registerCamera(camera: Entity): void;
-
-    /**
-     * Upload meshes to the GPU
-     */
-
-    /**
-     * Upload a single mesh to GPU
-     */
-    public abstract uploadMeshToGPU(meshId: string, vertices: Float32Array, normals: Float32Array, uvs: Float32Array, indices: Uint32Array | Uint16Array): void;
-
-    public abstract addTexture(textureId: string, imageData: ImageData): void;
 }

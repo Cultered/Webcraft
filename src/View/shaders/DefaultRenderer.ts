@@ -1,5 +1,6 @@
-export const renderer = /*glsl*/`//its actually wgsl but i want to use syntax highlighting
-
+import { CustomRenderShader } from '../../Model/Components/CustomRenderShader';
+// Vertex shader with group 1 binding
+const vertexShader = /*glsl*/`
 struct VertexOut {
     @builtin(position) position: vec4f,
     @location(0) fragPosition: vec4f,
@@ -25,8 +26,6 @@ var textureSampler: sampler;
 @group(0) @binding(4)
 var diffuseTexture: texture_2d<f32>;
 
-
-
 @vertex
 fn vertex_main(in: VertexIn,@builtin(vertex_index) v_idx: u32, @builtin(instance_index) i_idx: u32) -> VertexOut {
   var output: VertexOut;
@@ -45,7 +44,9 @@ fn vertex_main(in: VertexIn,@builtin(vertex_index) v_idx: u32, @builtin(instance
   
   return output;
 }
+`;
 
+const fragmentShader = /*glsl*/`
 @fragment
 fn fragment_main(fragData: VertexOut) -> @location(0) vec4f {
     // Simple directional light
@@ -65,4 +66,15 @@ fn fragment_main(fragData: VertexOut) -> @location(0) vec4f {
     
     return vec4f(finalColor, 1.0);
 }
-`
+`;
+
+// Create shader with buffer specification
+const defaultRenderShader = new CustomRenderShader(
+    'default',
+    vertexShader,
+    fragmentShader,
+    [
+    ]
+);
+
+export default defaultRenderShader;
