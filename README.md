@@ -6,4 +6,4 @@ Run the dev server:
 npm run dev
 ```
 
-There will be no documentation for it is evil
+Documentation is a scarce resourse nowadays
