@@ -8,6 +8,7 @@ export let DELTA_TIME = 0;
 export let CANVAS: HTMLCanvasElement;
 export let MODEL: Model;
 export let DEPTH_VIEW: GPUTextureView | undefined;
+export let VIEW  : WebGPUView;
 
 export default class Controller {
   public model!: Model;
@@ -26,7 +27,9 @@ export default class Controller {
   async init() {
     this.model = new Model();
     MODEL = this.model;
+
     this.view = await createView(this.canvasEl);
+    VIEW = this.view;
     this.canvasEl.addEventListener('click', () => {
       this.canvasEl.requestPointerLock?.();
     });
@@ -46,7 +49,7 @@ export default class Controller {
       debug.perf("model-update", () => this.model.update());
       debug.log(this.model.getCamera(this.camId)?.position.reduce((prev, val) => prev + val.toFixed(2) + " ", "") || "No camera");
       this.renderLoop();
-      if(this.view instanceof WebGPUView) DEPTH_VIEW = this.view.depthView;
+      DEPTH_VIEW = this.view.depthView;
       requestAnimationFrame(this.controllerLoop);
       debug.flush();
     });

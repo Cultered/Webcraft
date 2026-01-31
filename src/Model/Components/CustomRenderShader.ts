@@ -15,6 +15,14 @@ export interface CustomBufferSpec {
     data: ArrayBuffer | ArrayBufferView;
 }
 
+export interface CustomTextureBufferSpec {
+    binding: number;
+    visibility: number; // GPUShaderStage flags 
+    texture: GPUTextureBindingLayout;
+    textureId: string; // ID of the texture in TextureHelper
+}
+
+
 /**
  * Optional pipeline settings for custom render shaders.
  * Uses WebGPU types (GPUCullMode, GPUBlendState, GPUCompareFunction) which are
@@ -61,6 +69,8 @@ export class CustomRenderShader implements Component {
      */
     public bufferSpecs: CustomBufferSpec[];
 
+    public textureBufferSpecs: CustomTextureBufferSpec[];
+
     /**
      * Optional pipeline settings (cullMode, blend, depthWriteEnabled, depthCompare).
      * If not specified, defaults are used: cullMode='back', blend=alpha blending,
@@ -73,12 +83,14 @@ export class CustomRenderShader implements Component {
         vertexShader: string,
         fragmentShader: string,
         bufferSpecs: CustomBufferSpec[] = [],
+        textureBufferSpecs: CustomTextureBufferSpec[] = [],
         pipelineSettings?: PipelineSettings
     ) {
         this.id = id;
         this.vertexShader = vertexShader;
         this.fragmentShader = fragmentShader;
         this.bufferSpecs = bufferSpecs;
+        this.textureBufferSpecs = textureBufferSpecs;
         this.pipelineSettings = pipelineSettings;
     }
 

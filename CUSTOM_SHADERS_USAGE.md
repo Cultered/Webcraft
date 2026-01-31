@@ -12,6 +12,7 @@ The custom shader system allows you to create entities with custom WGSL shaders 
 
 ```typescript
 import CustomRenderShader from './src/Model/Components/CustomRenderShader';
+import { ShaderStage } from './src/config/webgpu-constants';
 
 // Define your custom vertex shader (WGSL)
 const vertexShader = `
@@ -216,28 +217,28 @@ const exampleRenderShader = new CustomRenderShader(
             size: u_time.byteLength, // Size in bytes
             data: u_time,             // ArrayBuffer or TypedArray
             type: 'uniform',
-            visibility: GPUShaderStage.VERTEX | GPUShaderStage.FRAGMENT
+            visibility: ShaderStage.VERTEX | ShaderStage.FRAGMENT
         },
         {
             binding: 1,
             size: u_mouse.byteLength, // Size in bytes
             data: u_mouse,             // ArrayBuffer or TypedArray
             type: 'uniform',
-            visibility: GPUShaderStage.VERTEX | GPUShaderStage.FRAGMENT
+            visibility: ShaderStage.VERTEX | ShaderStage.FRAGMENT
         },
         {
             binding: 2,
             size: u_size.byteLength, // Size in bytes
             data: u_size,             // ArrayBuffer or TypedArray
             type: 'uniform',
-            visibility: GPUShaderStage.VERTEX | GPUShaderStage.FRAGMENT
+            visibility: ShaderStage.VERTEX | ShaderStage.FRAGMENT
         },
         {
             binding: 3,
             size: cameraPos.byteLength, // Size in bytes
             data: cameraPos,             // ArrayBuffer or TypedArray
             type: 'uniform',
-            visibility: GPUShaderStage.VERTEX | GPUShaderStage.FRAGMENT
+            visibility: ShaderStage.VERTEX | ShaderStage.FRAGMENT
         }
     ]
 );

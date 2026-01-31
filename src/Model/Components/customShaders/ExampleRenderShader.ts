@@ -1,6 +1,7 @@
 import CustomRenderShader from '../CustomRenderShader';
 import { CANVAS } from '../../../Controller/Controller';
 import { MODEL } from '../../../Controller/Controller';
+import { ShaderStage } from '../../../config/webgpu-constants';
 const u_time = new Float32Array([Date.now() / 1000 % 1000]);
 let x = 0;
 let y = 0;
@@ -60,14 +61,25 @@ fn fragment_main(fragData: VertexOut) -> @location(0) vec4f {
   stx = stx;
   sty = sty;
 
+  // Add wave distortion based on u_time and UV coordinates
+  let waveFrequency = 50.0;
+  let waveAmplitude = 0.05;
+  let waveX = sin(fragData.uv.y * waveFrequency + u_time) * waveAmplitude;
+  let waveY = cos(fragData.uv.x * waveFrequency + u_time) * waveAmplitude;
+  
+  // Create distorted UV coordinates
+  let newFragDataUV = vec2f(
+    fragData.uv.x + waveX,
+    fragData.uv.y + waveY
+  );
   
     // Simple directional light
-    let lightDir = normalize(vec3f(1.0, 1.0, -1.0));
+    let lightDir = normalize(vec3f(0.0, 3.0, 1.0));
     let lightColor = vec3f(1.0, 1.0, 1.0);
     let ambientColor = vec3f(0.2, 0.2, 0.2);
     
-    // Sample texture color
-    let textureColor = textureSample(diffuseTexture, textureSampler, fragData.uv).rgb;
+    // Sample texture color using distorted UV
+    let textureColor = textureSample(diffuseTexture, textureSampler, newFragDataUV).rgb;
     
     // Calculate diffuse lighting using dot product of normal and light direction
     let dotNL = max(dot(fragData.worldNormal, lightDir), 0.0);
@@ -92,28 +104,28 @@ const exampleRenderShader = new CustomRenderShader(
             size: u_time.byteLength, // Size in bytes
             data: u_time,             // ArrayBuffer or TypedArray
             type: 'uniform',
-            visibility: GPUShaderStage.VERTEX | GPUShaderStage.FRAGMENT
+            visibility: ShaderStage.VERTEX | ShaderStage.FRAGMENT
         },
         {
             binding: 1,
             size: u_mouse.byteLength, // Size in bytes
             data: u_mouse,             // ArrayBuffer or TypedArray
             type: 'uniform',
-            visibility: GPUShaderStage.VERTEX | GPUShaderStage.FRAGMENT
+            visibility: ShaderStage.VERTEX | ShaderStage.FRAGMENT
         },
         {
             binding: 2,
             size: u_size.byteLength, // Size in bytes
             data: u_size,             // ArrayBuffer or TypedArray
             type: 'uniform',
-            visibility: GPUShaderStage.VERTEX | GPUShaderStage.FRAGMENT
+            visibility: ShaderStage.VERTEX | ShaderStage.FRAGMENT
         },
         {
             binding: 3,
             size: cameraPos.byteLength, // Size in bytes
             data: cameraPos,             // ArrayBuffer or TypedArray
             type: 'uniform',
-            visibility: GPUShaderStage.VERTEX | GPUShaderStage.FRAGMENT
+            visibility: ShaderStage.VERTEX | ShaderStage.FRAGMENT
         }
     ]
 );

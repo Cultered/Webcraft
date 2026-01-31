@@ -7,6 +7,7 @@ import type Entity from '../Model/Entity';
 import MeshComponent from '../Model/Components/MeshComponent';
 import CustomRenderShader, { type CustomBufferSpec } from '../Model/Components/CustomRenderShader';
 import { TextureHelper } from './textureHelper';
+import { ShaderStage } from '../config/webgpu-constants';
 
 
 export class WebGPUView extends BaseView {
@@ -30,25 +31,17 @@ export class WebGPUView extends BaseView {
     private projectionBuffer?: GPUBuffer;
     private textureSampler?: GPUSampler;
     private bindGroups = new Map<string, GPUBindGroup>();
-    public th: TextureHelper = new TextureHelper(this);
+    public th?: TextureHelper;
 
-    // Added MSAA fields
     private msaaColorTexture?: GPUTexture;
-    private sampleCount = 4; // or 2/4/8 based on adapter
+    private sampleCount = 4;
 
-    // Custom shader support
+
     private customShaderObjects: Entity[] = [];
     private customShaderBindGroups = new Map<string, GPUBindGroup[]>();
-    private customShaderObjectIndices = new Map<string, number>(); // Maps entity ID to storage buffer index
-    private customShaderBuffers = new Map<string, Map<number, GPUBuffer>>(); // Maps shader ID -> binding -> GPUBuffer
+    private customShaderObjectIndices = new Map<string, number>();
+    private customShaderBuffers = new Map<string, Map<number, GPUBuffer>>();
 
-
-    /**
-     * Initialize WebGPU context and set up rendering pipeline.
-     * 
-     * @param canvas - HTML canvas element to render to
-     * @returns Promise that resolves to WebGPU initialization objects or undefined if WebGPU is unavailable
-     */
     public async init(canvas: HTMLCanvasElement): Promise<readonly [GPUAdapter, GPUDevice, HTMLCanvasElement, GPUCanvasContext, GPUTextureFormat] | undefined> {
         try {
             const adapter = await navigator.gpu.requestAdapter({ powerPreference: 'high-performance' });
@@ -61,6 +54,7 @@ export class WebGPUView extends BaseView {
             this.device = device;
             this.canvas = canvas;
             this.context = context;
+            this.th = new TextureHelper(this);
 
             try {
                 // Create helper to (re)create MSAA color + depth attachments sized to the canvas
@@ -77,6 +71,7 @@ export class WebGPUView extends BaseView {
                         format: 'depth24plus',
                         usage: GPUTextureUsage.RENDER_ATTACHMENT,
                     });
+
 
                     this.msaaColorTexture = this.device!.createTexture({
                         size: { width: w, height: h, depthOrArrayLayers: 1 },
@@ -110,8 +105,8 @@ export class WebGPUView extends BaseView {
                 this.textureSampler = device.createSampler({
                     addressModeU: 'repeat',
                     addressModeV: 'repeat',
-                    magFilter: 'nearest',
-                    minFilter: 'nearest',
+                    magFilter: 'linear',
+                    minFilter: 'linear',
                 });
 
 
@@ -141,18 +136,6 @@ export class WebGPUView extends BaseView {
         }
     }
 
-    /**
-     * Register scene objects with static/non-static optimization.
-     * 
-     * This method allows efficient handling of static and non-static objects by:
-     * - Organizing objects in the buffer with static objects first, then non-static
-     * - Only updating the non-static portion when updateStatic is false
-     * - Maintaining separate batch tracking for optimal rendering
-     * 
-     * @param staticObjects - Objects that don't change and can be cached in GPU memory
-     * @param nonStaticObjects - Objects that may change and need regular updates
-     * @param updateStatic - Whether to update static objects (use true for initial setup or when static objects change)
-     */
     public registerSceneObjectsSeparated(staticObjects: Entity[], nonStaticObjects: Entity[], updateStatic: boolean): void {
         if (!this.device) throw new Error('WebGPU device not initialized');
 
@@ -212,8 +195,8 @@ export class WebGPUView extends BaseView {
 
     private createPipeline(shader: CustomRenderShader): void {
         if (!this.device) return;
-        // Check if pipeline already exists
-        if (this.renderPipelines.has(`${shader.id}`)) return;
+        // Check if pipeline and bind groups already exist
+        if (this.renderPipelines.has(`${shader.id}`) && this.customShaderBindGroups.has(shader.id)) return;
         try {
             // Create shader module with custom vertex and fragment shaders
             const shaderModule = this.device.createShaderModule({
@@ -225,14 +208,16 @@ export class WebGPUView extends BaseView {
             });
             // Create bind group layout for group 0 (same as default pipeline)
             const bindGroupLayout0 = this.device.createBindGroupLayout({
+                label: 'Default Bind Group Layout',
                 entries: [
-                    { binding: 0, visibility: GPUShaderStage.VERTEX, buffer: { type: 'read-only-storage' } },
-                    { binding: 1, visibility: GPUShaderStage.VERTEX, buffer: { type: 'uniform' } },
-                    { binding: 2, visibility: GPUShaderStage.VERTEX, buffer: { type: 'uniform' } },
-                    { binding: 3, visibility: GPUShaderStage.FRAGMENT, sampler: {} },
-                    { binding: 4, visibility: GPUShaderStage.FRAGMENT, texture: { sampleType: 'float' } },
+                    { binding: 0, visibility: ShaderStage.VERTEX, buffer: { type: 'read-only-storage' } },
+                    { binding: 1, visibility: ShaderStage.VERTEX, buffer: { type: 'uniform' } },
+                    { binding: 2, visibility: ShaderStage.VERTEX, buffer: { type: 'uniform' } },
+                    { binding: 3, visibility: ShaderStage.VERTEX | ShaderStage.FRAGMENT, sampler: {} },
+                    { binding: 4, visibility: ShaderStage.FRAGMENT, texture: { sampleType: 'float' } },
                 ],
             });
+            const bindGroupLayouts: GPUBindGroupLayout[] = [bindGroupLayout0];
             // Create bind group layout for group 1 (additional custom buffers)
             const group1Entries = shader.bufferSpecs.map(spec => ({
                 binding: spec.binding,
@@ -243,15 +228,32 @@ export class WebGPUView extends BaseView {
             }));
 
             const bindGroupLayout1 = this.device.createBindGroupLayout({
+                label: 'Custom Shader Buffer Bind Group Layout',
                 entries: group1Entries
             });
+            bindGroupLayouts.push(bindGroupLayout1);
 
-            // Create pipeline layout with both bind groups
-            const pipelineLayout = this.device.createPipelineLayout({
-                bindGroupLayouts: group1Entries.length > 0
-                    ? [bindGroupLayout0, bindGroupLayout1]
-                    : [bindGroupLayout0]
+            // Create bind group layout for group 2 (additional custom textures)
+            const group2Entries = shader.textureBufferSpecs.map(spec => ({
+                binding: spec.binding,
+                visibility: spec.visibility,
+                texture: spec.texture
+            }));
+
+            const bindGroupLayout2 = this.device.createBindGroupLayout({
+                label: 'Custom Shader Texture Bind Group Layout',
+                entries: group2Entries
             });
+
+            bindGroupLayouts.push(bindGroupLayout2);
+            const descriptor = {
+                bindGroupLayouts: bindGroupLayouts
+
+            }
+            console.log(descriptor);
+
+            // Create pipeline layout with all bind groups
+            const pipelineLayout = this.device.createPipelineLayout(descriptor);
 
             // Define vertex buffers (same format as default pipeline)
             const vertexBuffers = [
@@ -318,41 +320,44 @@ export class WebGPUView extends BaseView {
             this.renderPipelines.set(`${shader.id}`, pipeline);
 
 
-            // Create GPU buffers and bind group for group 1 if there are buffer specs
-            if (group1Entries.length > 0) {
-                const bufferMap = new Map<number, GPUBuffer>();
+            // Create GPU buffers and bind group for group 1 (even if empty, Firefox requires it)
+            const bufferMap = new Map<number, GPUBuffer>();
 
-                // Create GPU buffers for each buffer spec
-                for (const spec of shader.bufferSpecs) {
-                    const buffer = this.device.createBuffer({
-                        size: spec.size,
-                        usage: GPUBufferUsage.COPY_DST | (
-                            spec.type === 'uniform' ? GPUBufferUsage.UNIFORM :
-                                spec.type === 'storage' ? GPUBufferUsage.STORAGE :
-                                    GPUBufferUsage.STORAGE // read-only-storage also uses STORAGE
-                        )
-                    });
-
-                    // Initialize buffer with data
-                    this.updateCustomBuffer(buffer, spec);
-
-                    bufferMap.set(spec.binding, buffer);
-                }
-
-                // Store buffer map for this shader
-                this.customShaderBuffers.set(shader.id, bufferMap);
-
-                // Create bind group with the created buffers
-                const bindGroup1 = this.device.createBindGroup({
-                    layout: bindGroupLayout1,
-                    entries: shader.bufferSpecs.map(spec => ({
-                        binding: spec.binding,
-                        resource: { buffer: bufferMap.get(spec.binding)! }
-                    }))
+            // Create GPU buffers for each buffer spec
+            for (const spec of shader.bufferSpecs) {
+                const buffer = this.device.createBuffer({
+                    size: spec.size,
+                    usage: GPUBufferUsage.COPY_DST | (
+                        spec.type === 'uniform' ? GPUBufferUsage.UNIFORM :
+                            spec.type === 'storage' ? GPUBufferUsage.STORAGE :
+                                GPUBufferUsage.STORAGE // read-only-storage also uses STORAGE
+                    )
                 });
 
-                this.customShaderBindGroups.set(shader.id, [bindGroup1]);
+                // Initialize buffer with data
+                this.updateCustomBuffer(buffer, spec);
+
+                bufferMap.set(spec.binding, buffer);
             }
+
+            // Store buffer map for this shader
+            this.customShaderBuffers.set(shader.id, bufferMap);
+
+            // Create bind group with the created buffers (or empty bind group if no specs)
+            // Use pipeline.getBindGroupLayout(1) to ensure we use the exact same layout - Firefox is strict about this
+            const bindGroup1 = this.device.createBindGroup({
+                layout: pipeline.getBindGroupLayout(1),
+                entries: shader.bufferSpecs.map(spec => ({
+                    binding: spec.binding,
+                    resource: { buffer: bufferMap.get(spec.binding)! }
+                }))
+            });
+
+            this.customShaderBindGroups.set(shader.id, [bindGroup1]);
+            console.log(`Bind group 1 created for shader: ${shader.id}, entries: ${shader.bufferSpecs.length}`);
+
+
+
 
             console.log(`Pipeline created for shader: ${shader.id}`);
         }
@@ -360,9 +365,7 @@ export class WebGPUView extends BaseView {
             console.error(`Failed to create pipeline for shader ${shader.id}:`, error);
         }
     }
-    /**
-     * Create custom render pipelines for objects with CustomRenderShader component
-     */
+
     private createCustomPipelines(customShaderObjects: Entity[]): void {
         if (!this.device) return;
 
@@ -408,7 +411,10 @@ export class WebGPUView extends BaseView {
         const swapView = this.context.getCurrentTexture().createView();
         const msaaView = this.msaaColorTexture!.createView();
 
+
         this.depthView = this.depthTexture!.createView();
+
+
         const renderPassDescriptor: GPURenderPassDescriptor = {
             colorAttachments: [{
                 view: msaaView,
@@ -429,6 +435,16 @@ export class WebGPUView extends BaseView {
             const passEncoder = commandEncoder.beginRenderPass(renderPassDescriptor);
             passEncoder.setPipeline(this.renderPipelines.get('default')!);
 
+            // Set bind groups 1 and 2 for the default pipeline (Firefox requires all bind groups to be set)
+            const defaultBindGroups = this.customShaderBindGroups.get('default');
+            if (defaultBindGroups && defaultBindGroups[0]) {
+                passEncoder.setBindGroup(1, defaultBindGroups[0]);
+            }
+            // Get empty bind group 2 for default pipeline
+            const defaultPipeline = this.renderPipelines.get('default')!;
+            const defaultBindGroup2 = this.getBindingGroupForCustomShaderTextures(defaultPipeline, defaultRenderShader);
+            passEncoder.setBindGroup(2, defaultBindGroup2);
+
             // Optimized rendering: draw static objects first, then non-static objects, grouped by mesh+texture
             let objIndex = 0;
             // First, draw all static objects grouped by mesh+texture
@@ -437,7 +453,7 @@ export class WebGPUView extends BaseView {
                 if (!buf) continue;
 
                 // Get the appropriate bind group for this texture
-                const bindGroup = this.getBindGroupForTexture(batch.textureId);
+                const bindGroup = this.getBindGroupForDefaultTexture(batch.textureId);
                 passEncoder.setBindGroup(0, bindGroup);
 
                 passEncoder.setVertexBuffer(0, buf.vertexBuffer);
@@ -453,7 +469,7 @@ export class WebGPUView extends BaseView {
                 if (!buf) continue;
 
                 // Get the appropriate bind group for this texture
-                const bindGroup = this.getBindGroupForTexture(batch.textureId);
+                const bindGroup = this.getBindGroupForDefaultTexture(batch.textureId);
                 passEncoder.setBindGroup(0, bindGroup);
 
                 passEncoder.setVertexBuffer(0, buf.vertexBuffer);
@@ -471,7 +487,7 @@ export class WebGPUView extends BaseView {
 
                 if (!customShader || !meshComponent) continue;
 
-                const pipeline = this.renderPipelines.get(`custom-${customShader.id}`);
+                const pipeline = this.renderPipelines.get(`${customShader.id}`);
                 if (!pipeline) {
                     console.warn(`Custom pipeline not found for shader: ${customShader.id}`);
                     continue;
@@ -491,13 +507,25 @@ export class WebGPUView extends BaseView {
                 passEncoder.setPipeline(pipeline);
 
                 // Bind group 0 (default bindings: camera, projection, texture, etc.)
-                const bindGroup0 = this.getBindGroupForTexture(meshComponent.texture);
+                const bindGroup0 = this.getBindGroupForDefaultTexture(meshComponent.texture);
                 passEncoder.setBindGroup(0, bindGroup0);
 
-                // Bind group 1 (custom additional buffers)
-                const bindGroups1 = this.customShaderBindGroups.get(customShader.id);
-                if (bindGroups1 && bindGroups1.length > 0) {
-                    passEncoder.setBindGroup(1, bindGroups1[0]);
+                // Bind group 1 (custom additional buffers - always set, even if empty)
+                const customBindGroups = this.customShaderBindGroups.get(customShader.id);
+                if (customBindGroups && customBindGroups[0]) {
+                    passEncoder.setBindGroup(1, customBindGroups[0]);
+                } else {
+                    console.warn(`Missing bind group 1 for custom shader: ${customShader.id}, skipping draw`);
+                    continue;
+                }
+
+                // Bind group 2 (custom additional textures)
+                const bindGroup2 = this.getBindingGroupForCustomShaderTextures(pipeline, customShader);
+                passEncoder.setBindGroup(2, bindGroup2);
+
+                // Bind group 3 (custom additional samplers)
+                if (customBindGroups && customBindGroups[2]) {
+                    passEncoder.setBindGroup(3, customBindGroups[2]);
                 }
 
                 // Set vertex and index buffers
@@ -568,7 +596,6 @@ export class WebGPUView extends BaseView {
         this.objectBuffers.set(meshId, { vertexBuffer, indexBuffer, indices });
     }
 
-
     private updateObjectStorageBufferWithSeparation(staticObjects: Entity[], nonStaticObjects: Entity[]): void {
         if (!this.device) throw new Error('Device not initialized');
         const totalObjectCount = staticObjects.length + nonStaticObjects.length + this.customShaderObjects.length;
@@ -587,6 +614,7 @@ export class WebGPUView extends BaseView {
         // Add custom shader object transforms after the regular objects
         const customShaderBaseIndex = this.getCustomShaderBaseIndex(staticObjects, nonStaticObjects);
         this.updateCustomShaderObjectTransforms(customShaderBaseIndex);
+        this.updateCustomShaderBuffers();
 
         if (recreated) {
             // Note: Bind groups are now created dynamically in render() based on texture
@@ -624,9 +652,6 @@ export class WebGPUView extends BaseView {
         this.updateCustomShaderBuffers();
     }
 
-    /**
-     * Calculate the base index for custom shader objects in the storage buffer
-     */
     private getCustomShaderBaseIndex(staticObjects: Entity[], nonStaticObjects: Entity[]): number {
         return staticObjects.length + nonStaticObjects.length;
     }
@@ -756,9 +781,6 @@ export class WebGPUView extends BaseView {
 
     }
 
-    /**
-     * Update transform matrices for custom shader objects in the storage buffer
-     */
     private updateCustomShaderObjectTransforms(baseIndex: number): void {
         if (!this.device || !this.objectStorageBuffer) return;
 
@@ -782,9 +804,6 @@ export class WebGPUView extends BaseView {
         }
     }
 
-    /**
-     * Helper method to update a GPU buffer from a buffer spec's data
-     */
     private updateCustomBuffer(buffer: GPUBuffer, spec: CustomBufferSpec): void {
         if (!this.device) return;
 
@@ -799,10 +818,6 @@ export class WebGPUView extends BaseView {
         this.device.queue.writeBuffer(buffer, 0, data);
     }
 
-    /**
-     * Update all custom shader buffers from their buffer specs
-     * Called during updateNonStaticObjectsOnly to sync user changes
-     */
     private updateCustomShaderBuffers(): void {
         if (!this.device) return;
 
@@ -823,23 +838,17 @@ export class WebGPUView extends BaseView {
         }
     }
 
-    /**
-     * Get or create a bind group for the specified texture
-     * @param textureId - The texture identifier
-     * @returns GPUBindGroup for the texture
-     */
-    private getBindGroupForTexture(textureId: string): GPUBindGroup {
+    private getBindGroupForDefaultTexture(textureId: string): GPUBindGroup {
         if (!this.device || !this.renderPipelines.get('default')) {
             throw new Error('WebGPU device or pipeline not initialized');
         }
-
         // Check if we already have a bind group for this texture
         if (this.bindGroups.has(textureId)) {
             return this.bindGroups.get(textureId)!;
         }
 
         // Get the texture (use primitive texture as fallback)
-        const texture = this.th.textures.get(textureId) || this.th.primitiveTexture;
+        const texture = this.th!.textures.get(textureId) || this.th!.primitiveTexture;
         if (!texture) {
             throw new Error(`Texture '${textureId}' not found and no primitive texture available`);
         }
@@ -864,7 +873,25 @@ export class WebGPUView extends BaseView {
         return bindGroup;
     }
 
-
-
-
+    private getBindingGroupForCustomShaderTextures(customRenderPipeline: GPURenderPipeline, customShader: CustomRenderShader): GPUBindGroup {
+        if (!this.device) {
+            throw new Error('WebGPU device not initialized');
+        }
+        // Get the bind group layout for group 2
+        const bindGroupLayout = customRenderPipeline.getBindGroupLayout(2);
+        const bindGroup = this.device.createBindGroup({
+            layout: bindGroupLayout,
+            entries: customShader.textureBufferSpecs.map((spec, index) => {
+                const texture = this.th!.textures.get(spec.textureId) || this.th!.primitiveTexture;
+                if (!texture) {
+                    throw new Error(`Texture '${spec.binding}' not found and no primitive texture available`);
+                }
+                return {
+                    binding: index,
+                    resource: texture.createView()
+                };
+            })
+        });
+        return bindGroup;
+    }
 }
