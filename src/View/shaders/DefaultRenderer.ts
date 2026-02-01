@@ -50,9 +50,9 @@ const fragmentShader = /*glsl*/`
 @fragment
 fn fragment_main(fragData: VertexOut) -> @location(0) vec4f {
     // Simple directional light
-    let lightDir = normalize(vec3f(0.0, 3.0, 1.0));
+    let lightDir = normalize(vec3f(0.0, 1.0, 0.0));
     let lightColor = vec3f(1.0, 1.0, 1.0);
-    let ambientColor = vec3f(0.2, 0.2, 0.2);
+    let ambientColor = vec3f(0.26, 0.23, 0.2);
     
     // Sample texture color
     let textureColor = textureSample(diffuseTexture, textureSampler, fragData.uv).rgb;

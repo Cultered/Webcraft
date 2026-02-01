@@ -104,7 +104,7 @@ fn fragment_main(fragData: VertexOut) -> @location(0) vec4f {
     
     // Horizon color
     let dayHorizon = vec3f(0.55, 0.70, 0.90);
-    let sunsetHorizon = vec3f(0.95, 0.50, 0.25);
+    let sunsetHorizon = vec3f(0.95, 0.30, 0.25);
     let nightHorizon = vec3f(0.05, 0.08, 0.15);
     
     // Time of day factor based on sun height
@@ -124,23 +124,21 @@ fn fragment_main(fragData: VertexOut) -> @location(0) vec4f {
     
     // Mie scattering (glow around sun)
     let miePhase = pow(max(cosGamma, 0.0), 8.0);
-    let mieColor = mix(vec3f(1.0, 0.6, 0.3), vec3f(1.0, 0.95, 0.8), dayFactor);
-    skyColor = skyColor + mieColor * miePhase * (0.2 + sunsetFactor * 0.5);
+    let mieColor = mix(vec3f(1.0, 0.0, 0.0), vec3f(1.0, 0.95, 0.8), dayFactor);
+    let mieIntensity = mix(0.0, 1.0, dayFactor);
+    skyColor = skyColor + mieColor * miePhase*5.5* mieIntensity * (0.2 + sunsetFactor * 0.5);
     
     // Rayleigh scattering (blue tint away from sun)
     let rayleighPhase = 0.75 * (1.0 + cosGamma * cosGamma);
     let rayleighColor = vec3f(0.3, 0.5, 1.0) * rayleighPhase * 0.05 * dayFactor;
     skyColor = skyColor + rayleighColor;
-    
-    // Sun disk
-    let sunRadius = 0.995;
-    let sunEdge = smoothstep(sunRadius, 0.999, cosGamma);
-    let sunCore = smoothstep(0.9995, 1.0, cosGamma);
-    var sunColor = vec3f(1.0, 0.98, 0.9) * sunEdge;
-    sunColor = sunColor + vec3f(1.0, 1.0, 0.95) * sunCore * 2.0;
-    
+
+    let sunCore = smoothstep(0.999, 1.0, cosGamma);
+    var sunColor = vec3f(1.0, 0.98, 0.9);
+    sunColor = vec3f(1.0, 1.0, 0.95) * sunCore * 2.0;
+
     // Sun color changes at sunset
-    let sunTint = mix(vec3f(1.0, 0.5, 0.2), vec3f(1.0, 1.0, 0.95), dayFactor);
+    let sunTint = mix(vec3f(1.0, 0.0, 0.0), vec3f(1.0, 1.0, 0.95), dayFactor);
     sunColor = sunColor * sunTint;
     skyColor = skyColor + sunColor * 3.0;
     
@@ -152,7 +150,7 @@ fn fragment_main(fragData: VertexOut) -> @location(0) vec4f {
     // Cloud color based on time of day
     let cloudLit = max(0.0, dot(normalize(vec3f(V.x, 0.0, V.z)), L));
     var cloudColor = mix(vec3f(0.8, 0.85, 0.95), vec3f(1.0, 0.95, 0.85), cloudLit);
-    cloudColor = mix(cloudColor * 0.3, cloudColor, dayFactor);
+    cloudColor = mix(cloudColor * 0.0, cloudColor, dayFactor);
     cloudColor = mix(cloudColor, vec3f(1.0, 0.7, 0.5), sunsetFactor * cloudLit);
     
     // Only show clouds above horizon
@@ -160,13 +158,13 @@ fn fragment_main(fragData: VertexOut) -> @location(0) vec4f {
     skyColor = mix(skyColor, cloudColor, cloudDensity * cloudMask * 0.6);
     
     // Stars at night (only visible when sun is below horizon)
-    let nightBlend = smoothstep(0.1, -0.2, sunHeight);
+    let nightBlend = smoothstep(0.1, -0.7, sunHeight);
     if (nightBlend > 0.01) {
         let starPos = floor(V * 200.0);
         let star = hash(starPos);
         let starBrightness = step(0.995, star) * nightBlend;
-        let twinkle = sin(u_time * 2.0 + star * 100.0) * 0.5 + 0.5;
-        skyColor = skyColor + vec3f(1.0, 1.0, 0.95) * starBrightness * twinkle;
+        
+        skyColor = skyColor + vec3f(1.0, 1.0, 0.95) * starBrightness;
     }
     
     // Ground color (below horizon)
