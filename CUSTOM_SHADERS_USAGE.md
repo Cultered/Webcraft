@@ -32,6 +32,11 @@ struct VertexIn {
 @group(0) @binding(0) var<storage, read> objectMatrices: array<mat4x4<f32>>;
 @group(0) @binding(1) var<uniform> view: mat4x4<f32>;
 @group(0) @binding(2) var<uniform> projectionMatrix: mat4x4<f32>;
+@group(0) @binding(3) var textureSampler: sampler;
+@group(0) @binding(4) var diffuseTexture: texture_2d<f32>;
+@group(0) @binding(5) var<uniform> globalLightDirection: vec4f;
+@group(0) @binding(6) var<uniform> globalLightColor: vec4f;
+@group(0) @binding(7) var<uniform> globalAmbientColor: vec4f;
 
 @vertex
 fn vertex_main(in: VertexIn, @builtin(instance_index) i_idx: u32) -> VertexOut {
@@ -146,6 +151,12 @@ struct VertexIn {
 var textureSampler: sampler;
 @group(0) @binding(4)
 var diffuseTexture: texture_2d<f32>;
+@group(0) @binding(5)
+var<uniform> globalLightDirection: vec4f;
+@group(0) @binding(6)
+var<uniform> globalLightColor: vec4f;
+@group(0) @binding(7)
+var<uniform> globalAmbientColor: vec4f;
 
 
 // Custom buffer in group 1
@@ -179,10 +190,10 @@ fn fragment_main(fragData: VertexOut) -> @location(0) vec4f {
   sty = sty;
 
   
-    // Simple directional light
-    let lightDir = normalize(vec3f(1.0, 1.0, 0.0));
-    let lightColor = vec3f(1.0, 1.0, 1.0);
-    let ambientColor = vec3f(0.2, 0.2, 0.2);
+    // Global directional light from uniform
+    let lightDir = normalize(globalLightDirection.xyz);
+    let lightColor = globalLightColor.rgb;
+    let ambientColor = globalAmbientColor.rgb;
     
     // Sample texture color
     let textureColor = textureSample(diffuseTexture, textureSampler, fragData.uv).rgb;
@@ -263,12 +274,22 @@ export default exampleRenderShader;
 The following bindings are automatically provided in group 0:
 
 ```wgsl
-@group(0) @binding(0) var<storage, read> objectMatrices: array<mat4x4<f32>>;
-@group(0) @binding(1) var<uniform> view: mat4x4<f32>;
-@group(0) @binding(2) var<uniform> projectionMatrix: mat4x4<f32>;
-@group(0) @binding(3) var textureSampler: sampler;
-@group(0) @binding(4) var diffuseTexture: texture_2d<f32>;
+@group(0) @binding(0) var<storage, read> objectMatrices: array<mat4x4<f32>>;  // Model matrices for instancing
+@group(0) @binding(1) var<uniform> view: mat4x4<f32>;                         // Camera view matrix
+@group(0) @binding(2) var<uniform> projectionMatrix: mat4x4<f32>;             // Projection matrix
+@group(0) @binding(3) var textureSampler: sampler;                            // Texture sampler
+@group(0) @binding(4) var diffuseTexture: texture_2d<f32>;                    // Diffuse texture
+@group(0) @binding(5) var<uniform> globalLightDirection: vec4f;               // Sun/light direction (xyz=dir, w=intensity)
+@group(0) @binding(6) var<uniform> globalLightColor: vec4f;                   // Directional light color (rgb=color, a=intensity)
+@group(0) @binding(7) var<uniform> globalAmbientColor: vec4f;                 // Ambient light color (rgb=color, a=intensity)
 ```
+
+**Lighting uniforms** are automatically animated by the SkyboxShader for day/night cycles:
+- `globalLightDirection`: Sun position cycling through the sky
+- `globalLightColor`: White during day, orange at sunset, near-black at night
+- `globalAmbientColor`: Warm ambient during day, cool/dark ambient at night
+
+You can also manually control these via `VIEW.globalLightDirection`, `VIEW.globalLightColor`, and `VIEW.globalAmbientColor`.
 
 ### Vertex Input Format
 

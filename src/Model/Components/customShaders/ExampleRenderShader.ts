@@ -30,6 +30,12 @@ struct VertexIn {
 var textureSampler: sampler;
 @group(0) @binding(4)
 var diffuseTexture: texture_2d<f32>;
+@group(0) @binding(5)
+var<uniform> globalLightDirection: vec4f;
+@group(0) @binding(6)
+var<uniform> globalLightColor: vec4f;
+@group(0) @binding(7)
+var<uniform> globalAmbientColor: vec4f;
 
 
 // Custom buffer in group 1
@@ -73,10 +79,10 @@ fn fragment_main(fragData: VertexOut) -> @location(0) vec4f {
     fragData.uv.y + waveY
   );
   
-    // Simple directional light
-    let lightDir = normalize(vec3f(0.0, 1.0, 0.0));
-    let lightColor = vec3f(1.0, 1.0, 1.0);
-    let ambientColor = vec3f(0.26, 0.23, 0.2);
+    // Global directional light from uniform
+    let lightDir = normalize(globalLightDirection.xyz);
+    let lightColor = globalLightColor.rgb;
+    let ambientColor = globalAmbientColor.rgb;
     
     
     // Sample texture color using distorted UV

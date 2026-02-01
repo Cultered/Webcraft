@@ -25,6 +25,12 @@ var<uniform> projectionMatrix: mat4x4<f32>;
 var textureSampler: sampler;
 @group(0) @binding(4)
 var diffuseTexture: texture_2d<f32>;
+@group(0) @binding(5)
+var<uniform> globalLightDirection: vec4f;
+@group(0) @binding(6)
+var<uniform> globalLightColor: vec4f;
+@group(0) @binding(7)
+var<uniform> globalAmbientColor: vec4f;
 
 @vertex
 fn vertex_main(in: VertexIn,@builtin(vertex_index) v_idx: u32, @builtin(instance_index) i_idx: u32) -> VertexOut {
@@ -49,10 +55,10 @@ fn vertex_main(in: VertexIn,@builtin(vertex_index) v_idx: u32, @builtin(instance
 const fragmentShader = /*glsl*/`
 @fragment
 fn fragment_main(fragData: VertexOut) -> @location(0) vec4f {
-    // Simple directional light
-    let lightDir = normalize(vec3f(0.0, 1.0, 0.0));
-    let lightColor = vec3f(1.0, 1.0, 1.0);
-    let ambientColor = vec3f(0.26, 0.23, 0.2);
+    // Global directional light from uniform
+    let lightDir = normalize(globalLightDirection.xyz);
+    let lightColor = globalLightColor.rgb;
+    let ambientColor = globalAmbientColor.rgb;
     
     // Sample texture color
     let textureColor = textureSample(diffuseTexture, textureSampler, fragData.uv).rgb;

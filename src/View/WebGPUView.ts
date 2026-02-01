@@ -29,6 +29,9 @@ export class WebGPUView extends BaseView {
     private objectStorageBuffer?: GPUBuffer;
     private cameraBuffer?: GPUBuffer;
     private projectionBuffer?: GPUBuffer;
+    private globalLightDirectionBuffer?: GPUBuffer;
+    private globalLightColorBuffer?: GPUBuffer;
+    private globalAmbientColorBuffer?: GPUBuffer;
     private textureSampler?: GPUSampler;
     private bindGroups = new Map<string, GPUBindGroup>();
     public th?: TextureHelper;
@@ -97,6 +100,23 @@ export class WebGPUView extends BaseView {
                     size: 64,
                     usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
                 });
+                this.globalLightDirectionBuffer = this.device.createBuffer({
+                    size: 16, // vec4f = 4 floats * 4 bytes
+                    usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
+                });
+                this.globalLightColorBuffer = this.device.createBuffer({
+                    size: 16, // vec4f = 4 floats * 4 bytes
+                    usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
+                });
+                this.globalAmbientColorBuffer = this.device.createBuffer({
+                    size: 16, // vec4f = 4 floats * 4 bytes
+                    usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
+                });
+
+                // Initialize global light direction, color, and ambient
+                this.device.queue.writeBuffer(this.globalLightDirectionBuffer, 0, new Float32Array(this.globalLightDirection));
+                this.device.queue.writeBuffer(this.globalLightColorBuffer, 0, new Float32Array(this.globalLightColor));
+                this.device.queue.writeBuffer(this.globalAmbientColorBuffer, 0, new Float32Array(this.globalAmbientColor));
 
                 // ensure projection is transposed before upload
                 const initialProj = M.mat4Projection(this.fov, (canvas.width || window.innerWidth) / (canvas.height || window.innerHeight), this.near, this.far);
@@ -215,6 +235,9 @@ export class WebGPUView extends BaseView {
                     { binding: 2, visibility: ShaderStage.VERTEX, buffer: { type: 'uniform' } },
                     { binding: 3, visibility: ShaderStage.VERTEX | ShaderStage.FRAGMENT, sampler: {} },
                     { binding: 4, visibility: ShaderStage.FRAGMENT, texture: { sampleType: 'float' } },
+                    { binding: 5, visibility: ShaderStage.VERTEX | ShaderStage.FRAGMENT, buffer: { type: 'uniform' } },
+                    { binding: 6, visibility: ShaderStage.VERTEX | ShaderStage.FRAGMENT, buffer: { type: 'uniform' } },
+                    { binding: 7, visibility: ShaderStage.VERTEX | ShaderStage.FRAGMENT, buffer: { type: 'uniform' } },
                 ],
             });
             const bindGroupLayouts: GPUBindGroupLayout[] = [bindGroupLayout0];
@@ -405,6 +428,17 @@ export class WebGPUView extends BaseView {
         if (!this.device || !this.context || !this.renderPipelines.get('default') || !this.depthTexture || !this.msaaColorTexture) {
             console.warn('Render skipped: device/context/pipeline not ready');
             return;
+        }
+
+        // Update global light direction and color buffers
+        if (this.globalLightDirectionBuffer) {
+            this.device.queue.writeBuffer(this.globalLightDirectionBuffer, 0, new Float32Array(this.globalLightDirection));
+        }
+        if (this.globalLightColorBuffer) {
+            this.device.queue.writeBuffer(this.globalLightColorBuffer, 0, new Float32Array(this.globalLightColor));
+        }
+        if (this.globalAmbientColorBuffer) {
+            this.device.queue.writeBuffer(this.globalAmbientColorBuffer, 0, new Float32Array(this.globalAmbientColor));
         }
 
         // use MSAA color texture as the attachment and resolve into swapchain view
@@ -865,6 +899,9 @@ export class WebGPUView extends BaseView {
                 { binding: 2, resource: { buffer: this.projectionBuffer! } },
                 { binding: 3, resource: this.textureSampler! },
                 { binding: 4, resource: texture.createView() },
+                { binding: 5, resource: { buffer: this.globalLightDirectionBuffer! } },
+                { binding: 6, resource: { buffer: this.globalLightColorBuffer! } },
+                { binding: 7, resource: { buffer: this.globalAmbientColorBuffer! } },
             ]
         });
 

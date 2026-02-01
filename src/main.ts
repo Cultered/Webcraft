@@ -48,7 +48,7 @@ import lexTextureUrl from './misc/lex.png';
     MODEL.addEntity(cube3);
 
     // Skybox: Giant cube that follows the camera
-    const skyboxMesh = { id: "skyboxMesh", ...generateCubeMesh(500) };
+    const skyboxMesh = { id: "skyboxMesh", ...generateCubeMesh(5000) };
     const skybox = new Entity('skybox', vec4(0, 0, 0), undefined, vec4(1, 1, 1, 1), false);
     skybox.addComponent(new MeshComponent(skyboxMesh, "example-texture"));
     skybox.addComponent(new Skybox('main-camera'));

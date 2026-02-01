@@ -1,11 +1,10 @@
 import CustomRenderShader from '../CustomRenderShader';
-import { MODEL } from '../../../Controller/Controller';
+import { MODEL, VIEW } from '../../../Controller/Controller';
 import { ShaderStage } from '../../../config/webgpu-constants';
 
 // Uniforms for the skybox shader
 const u_time = new Float32Array([0.0]);
 const cameraPos = new Float32Array([0, 0, 0, 0]);
-const sunDir = new Float32Array([0.5, 0.15, -0.85, 0.0]); // Sun direction (normalized in shader)
 
 // Vertex shader for skybox
 const vertexShader = /*wgsl*/`
@@ -25,10 +24,12 @@ struct VertexIn {
 @group(0) @binding(2) var<uniform> projectionMatrix: mat4x4<f32>;
 @group(0) @binding(3) var textureSampler: sampler;
 @group(0) @binding(4) var diffuseTexture: texture_2d<f32>;
+@group(0) @binding(5) var<uniform> globalLightDirection: vec4f;
+@group(0) @binding(6) var<uniform> globalLightColor: vec4f;
+@group(0) @binding(7) var<uniform> globalAmbientColor: vec4f;
 
 @group(1) @binding(0) var<uniform> u_time: f32;
 @group(1) @binding(1) var<uniform> cameraPos: vec4f;
-@group(1) @binding(2) var<uniform> sunDir: vec4f;
 
 @vertex
 fn vertex_main(in: VertexIn, @builtin(instance_index) i_idx: u32) -> VertexOut {
@@ -86,7 +87,7 @@ fn fbm(p: vec3f) -> f32 {
 @fragment
 fn fragment_main(fragData: VertexOut) -> @location(0) vec4f {
     let V = normalize(fragData.worldNormal);
-    let L = normalize(sunDir.xyz);
+    let L = normalize(globalLightDirection.xyz);
     
     // Sky gradient based on view direction
     let sunHeight = L.y;
@@ -100,16 +101,17 @@ fn fragment_main(fragData: VertexOut) -> @location(0) vec4f {
     // Zenith color (looking straight up)
     let dayZenith = vec3f(0.15, 0.35, 0.65);
     let sunsetZenith = vec3f(0.15, 0.20, 0.45);
-    let nightZenith = vec3f(0.02, 0.03, 0.08);
+    let nightZenith = vec3f(0.00, 0.00, 0.00);
     
     // Horizon color
     let dayHorizon = vec3f(0.55, 0.70, 0.90);
     let sunsetHorizon = vec3f(0.95, 0.30, 0.25);
-    let nightHorizon = vec3f(0.05, 0.08, 0.15);
+    let nightHorizon = vec3f(0.02, 0.03, 0.05);
     
     // Time of day factor based on sun height
     let dayFactor = smoothstep(-0.1, 0.3, sunHeight);
     let sunsetFactor = smoothstep(-0.1, 0.0, sunHeight) * smoothstep(0.3, 0.0, sunHeight);
+    let nightFactor = smoothstep(0.1, -0.1, sunHeight);
     
     // Interpolate sky colors
     var zenithColor = mix(nightZenith, dayZenith, dayFactor);
@@ -150,12 +152,12 @@ fn fragment_main(fragData: VertexOut) -> @location(0) vec4f {
     // Cloud color based on time of day
     let cloudLit = max(0.0, dot(normalize(vec3f(V.x, 0.0, V.z)), L));
     var cloudColor = mix(vec3f(0.8, 0.85, 0.95), vec3f(1.0, 0.95, 0.85), cloudLit);
-    cloudColor = mix(cloudColor * 0.0, cloudColor, dayFactor);
     cloudColor = mix(cloudColor, vec3f(1.0, 0.7, 0.5), sunsetFactor * cloudLit);
+    cloudColor = mix(cloudColor, vec3f(0.02, 0.02, 0.025), nightFactor);
     
     // Only show clouds above horizon
     let cloudMask = smoothstep(0.0, 0.2, viewHeight) * (1.0 - smoothstep(0.5, 0.9, viewHeight));
-    skyColor = mix(skyColor, cloudColor, cloudDensity * cloudMask * 0.6);
+    skyColor = mix(skyColor, cloudColor, cloudDensity * cloudMask * 0.68 );
     
     // Stars at night (only visible when sun is below horizon)
     let nightBlend = smoothstep(0.1, -0.7, sunHeight);
@@ -169,7 +171,9 @@ fn fragment_main(fragData: VertexOut) -> @location(0) vec4f {
     
     // Ground color (below horizon)
     let groundBlend = smoothstep(0.0, -0.05, viewHeight);
-    let groundColor = mix(vec3f(0.15, 0.12, 0.10), vec3f(0.25, 0.22, 0.18), dayFactor);
+    let dayGroundColor = vec3f(0.25, 0.22, 0.18);
+    let nightGroundColor = vec3f(0.02, 0.02, 0.03);
+    let groundColor = mix(nightGroundColor, dayGroundColor, dayFactor);
     skyColor = mix(skyColor, groundColor, groundBlend);
     
     // Tone mapping (simple Reinhard)
@@ -201,13 +205,6 @@ const skyboxShader = new CustomRenderShader(
             data: cameraPos,
             type: 'uniform',
             visibility: ShaderStage.VERTEX | ShaderStage.FRAGMENT
-        },
-        {
-            binding: 2,
-            size: sunDir.byteLength,
-            data: sunDir,
-            type: 'uniform',
-            visibility: ShaderStage.VERTEX | ShaderStage.FRAGMENT
         }
     ],
     [],
@@ -228,14 +225,67 @@ skyboxShader.update = () => {
         skyboxShader.bufferSpecs[1].data = new Float32Array(camera.position.slice(0, 4));
     }
 
-    // Sun direction - animate slowly for day/night cycle
-    // Or keep static for a fixed time of day
-    const sunAngle = Date.now() / 10000; // Very slow rotation
+    // Update global light direction to cycle day/night
+    const sunAngle = Date.now() / 30000; // Full cycle every ~3 minutes
     const sunX = Math.cos(sunAngle) * 0.8;
-    const sunY = Math.sin(sunAngle) * 0.3 + 0.2; // Keep sun relatively high
+    const sunY = Math.sin(sunAngle) * 0.7 + 0.2; // Keep sun relatively high at peak
     const sunZ = Math.sin(sunAngle) * 0.5;
     const len = Math.sqrt(sunX * sunX + sunY * sunY + sunZ * sunZ);
-    skyboxShader.bufferSpecs[2].data = new Float32Array([sunX / len, sunY / len, sunZ / len, 0.0]);
+    
+    if (VIEW) {
+        VIEW.globalLightDirection[0] = sunX / len;
+        VIEW.globalLightDirection[1] = sunY / len;
+        VIEW.globalLightDirection[2] = sunZ / len;
+        VIEW.globalLightDirection[3] = 1.0;
+
+        // Calculate light color based on sun height
+        const sunHeight = sunY / len;
+        
+        // Day: white light, Sunset/Sunrise: orange, Night: very dark
+        const dayFactor = Math.max(0, Math.min(1, (sunHeight + 0.1) / 0.4)); // 0 at night, 1 during day
+        const sunsetFactor = Math.max(0, 1 - Math.abs(sunHeight) * 5) * (sunHeight > -0.1 ? 1 : 0); // Peak at horizon
+        
+        // Interpolate colors
+        // Night: near black (0.05, 0.05, 0.1)
+        // Day: white (1.0, 1.0, 1.0)
+        // Sunset: orange (1.0, 0.5, 0.2)
+        let r = 0.05 + dayFactor * 0.95;
+        let g = 0.05 + dayFactor * 0.95;
+        let b = 0.1 + dayFactor * 0.9;
+        
+        // Add orange tint at sunset/sunrise
+        r = r + sunsetFactor * 0.1;
+        g = g - sunsetFactor * 0.1;
+        b = b - sunsetFactor * 0.2;
+        
+        // Clamp values
+        VIEW.globalLightColor[0] = Math.max(0, Math.min(1, r));
+        VIEW.globalLightColor[1] = Math.max(0, Math.min(1, g));
+        VIEW.globalLightColor[2] = Math.max(0, Math.min(1, b));
+        VIEW.globalLightColor[3] = 1.0;
+
+        // Update ambient color independently - dimmer at night, warmer at sunset
+        const ambientDayR = 0.26;
+        const ambientDayG = 0.23;
+        const ambientDayB = 0.2;
+        const ambientNightR = 0.02;
+        const ambientNightG = 0.02;
+        const ambientNightB = 0.05;
+        
+        let ambR = ambientNightR + dayFactor * (ambientDayR - ambientNightR);
+        let ambG = ambientNightG + dayFactor * (ambientDayG - ambientNightG);
+        let ambB = ambientNightB + dayFactor * (ambientDayB - ambientNightB);
+        
+        // Add slight warm tint at sunset/sunrise
+        ambR = ambR + sunsetFactor * 0.1;
+        ambG = ambG - sunsetFactor * 0.02;
+        ambB = ambB - sunsetFactor * 0.05;
+        
+        VIEW.globalAmbientColor[0] = Math.max(0.1, Math.min(1, ambR));
+        VIEW.globalAmbientColor[1] = Math.max(0.1, Math.min(1, ambG));
+        VIEW.globalAmbientColor[2] = Math.max(0.1, Math.min(1, ambB));
+        VIEW.globalAmbientColor[3] = 1.0;
+    }
 };
 
 export default skyboxShader;
