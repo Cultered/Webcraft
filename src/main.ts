@@ -13,6 +13,7 @@ import { loadImageData, loadOBJFile } from './misc/loadFiles';
 import exampleRenderShader from './Model/Components/customShaders/ExampleRenderShader';
 import exampleTextureShader from './Model/Components/customShaders/ExampleTextureShader';
 import skyboxShader from './Model/Components/customShaders/SkyboxShader';
+import oceanShader from './Model/Components/customShaders/OceanShader';
 import exampleTextureUrl from './misc/rcokwall.jpg';
 import { MODEL } from './Controller/Controller';
 import lexTextureUrl from './misc/lex.png';
@@ -54,5 +55,12 @@ import lexTextureUrl from './misc/lex.png';
     skybox.addComponent(new Skybox('main-camera'));
     skybox.addComponent(skyboxShader);
     MODEL.addEntity(skybox);
+
+    // Ocean: Large HD plane with realistic water shader
+    const oceanMesh = { id: "oceanMesh", ...generateHDPlaneMesh(2000, 500) };
+    const ocean = new Entity('ocean', vec4(0, -5, 0), undefined, vec4(1, 1, 1, 1), false);
+    ocean.addComponent(new MeshComponent(oceanMesh, "example-texture"));
+    ocean.addComponent(oceanShader);
+    MODEL.addEntity(ocean);
 
 })();

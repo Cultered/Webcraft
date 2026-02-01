@@ -149,10 +149,73 @@ fn fragment_main(fragData: VertexOut) -> @location(0) vec4f {
     let cloudNoise = fbm(cloudPos);
     let cloudDensity = smoothstep(0.4, 0.7, cloudNoise);
     
-    // Cloud color based on time of day
-    let cloudLit = max(0.0, dot(normalize(vec3f(V.x, 0.0, V.z)), L));
-    var cloudColor = mix(vec3f(0.8, 0.85, 0.95), vec3f(1.0, 0.95, 0.85), cloudLit);
-    cloudColor = mix(cloudColor, vec3f(1.0, 0.7, 0.5), sunsetFactor * cloudLit);
+    // Calculate cloud lighting with sun direction
+    // Use horizontal component of view direction relative to sun
+    let VhorizNorm = normalize(vec3f(V.x, 0.0, V.z));
+    let LhorizNorm = normalize(vec3f(L.x, 0.0, L.z));
+    
+    // How much the cloud faces the sun (1 = facing sun, -1 = facing away)
+    let cloudSunFacing = dot(VhorizNorm, LhorizNorm);
+    
+    // Detect actual cloud edges using density gradient
+    // Sample cloud density at offset positions to compute gradient
+    let eps = 0.02;
+    let densityRight = smoothstep(0.4, 0.7, fbm(cloudPos + vec3f(eps, 0.0, 0.0)));
+    let densityUp = smoothstep(0.4, 0.7, fbm(cloudPos + vec3f(0.0, eps, 0.0)));
+    let densityFwd = smoothstep(0.4, 0.7, fbm(cloudPos + vec3f(0.0, 0.0, eps)));
+    
+    // Cloud gradient points from inside cloud toward outside (toward less density)
+    let cloudGradient = vec3f(
+        cloudDensity - densityRight,
+        cloudDensity - densityUp,
+        cloudDensity - densityFwd
+    );
+    let gradLen = length(cloudGradient);
+    
+    // Edge is where gradient is strong (rapid density change)
+    let isEdge = smoothstep(0.02, 0.15, gradLen);
+    
+    // Edge normal points outward from cloud
+    let edgeNormal = select(vec3f(0.0), normalize(cloudGradient), gradLen > 0.001);
+    
+    // Rim lighting: edge lit when edge normal faces the sun
+    let edgeSunDot = dot(edgeNormal, L);
+    let rimLit = max(0.0, edgeSunDot) * isEdge;
+    
+    // Clouds facing away from sun (cloudSunFacing < 0) means we're looking at their sun-lit side
+    // These should be fully illuminated, no backside darkening
+    // Clouds facing toward sun (cloudSunFacing > 0) means we see their backside (away from sun)
+    // These get the edge rim lighting effect and darker interior
+    let viewingSunlitSide = smoothstep(0.1, -0.3, cloudSunFacing);
+    
+    // Backside darkening only applies when we're viewing the shaded side of the cloud
+    let backsideDarkness = smoothstep(0.2, -0.5, cloudSunFacing) * 0.6 * (1.0 - viewingSunlitSide);
+    
+    // Base cloud color (neutral gray-white)
+    var cloudColor = vec3f(0.85, 0.87, 0.92);
+    
+    // Darken the backside of clouds (only when viewing shaded side)
+    cloudColor = cloudColor * (1.0 - backsideDarkness);
+    
+    // Sun illumination color based on time of day
+    let sunIllumColor = mix(vec3f(1.0, 0.5, 0.2), vec3f(1.0, 0.98, 0.9), dayFactor);
+    
+    // Edge rim illumination - only on clouds where we see the shaded side
+    let rimStrength = rimLit * (0.4 + sunsetFactor * 0.8) * (1.0 - viewingSunlitSide);
+    cloudColor = cloudColor + sunIllumColor * rimStrength;
+    
+    // Full sun illumination for clouds where we see the sun-lit side
+    cloudColor = cloudColor + sunIllumColor * viewingSunlitSide * 0.3;
+    
+    // General sun-facing illumination
+    let sunFacingIllum = smoothstep(-0.2, 0.8, cloudSunFacing);
+    cloudColor = mix(cloudColor, cloudColor * sunIllumColor * 1.2, sunFacingIllum * 0.4);
+    
+    // Sunset tinting for clouds facing the sun
+    let sunsetCloudTint = vec3f(1.0, 0.6, 0.35);
+    cloudColor = mix(cloudColor, cloudColor * sunsetCloudTint, sunsetFactor * sunFacingIllum * 0.6);
+    
+    // Night darkening
     cloudColor = mix(cloudColor, vec3f(0.02, 0.02, 0.025), nightFactor);
     
     // Only show clouds above horizon
@@ -226,7 +289,7 @@ skyboxShader.update = () => {
     }
 
     // Update global light direction to cycle day/night
-    const sunAngle = Date.now() / 30000; // Full cycle every ~3 minutes
+    const sunAngle = Date.now()/10000; // Full cycle every ~3 minutes
     const sunX = Math.cos(sunAngle) * 0.8;
     const sunY = Math.sin(sunAngle) * 0.7 + 0.2; // Keep sun relatively high at peak
     const sunZ = Math.sin(sunAngle) * 0.5;
