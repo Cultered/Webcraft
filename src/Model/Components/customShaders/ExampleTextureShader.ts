@@ -6,7 +6,7 @@ import { DELTA_TIME } from '../../../Controller/Controller';
 import { ShaderStage } from '../../../config/webgpu-constants';
 
 // Vertex shader with group 1 binding
-const vertexShader = /*glsl*/`
+const vertexShader = /*wgsl*/`
 struct VertexOut {
     @builtin(position) position: vec4f,
     @location(0) fragPosition: vec4f,
@@ -54,7 +54,7 @@ fn vertex_main(in: VertexIn, @builtin(instance_index) i_idx: u32) -> VertexOut {
 }
 `;
 
-const fragmentShader = /*glsl*/`
+const fragmentShader = /*wgsl*/`
 
 @fragment
 fn fragment_main(fragData: VertexOut) -> @location(0) vec4f {

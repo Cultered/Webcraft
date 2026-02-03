@@ -1,6 +1,6 @@
 import { CustomRenderShader } from '../../Model/Components/CustomRenderShader';
 // Vertex shader with group 1 binding
-const vertexShader = /*glsl*/`
+const vertexShader = /*wgsl*/`
 struct VertexOut {
     @builtin(position) position: vec4f,
     @location(0) fragPosition: vec4f,
@@ -52,7 +52,7 @@ fn vertex_main(in: VertexIn,@builtin(vertex_index) v_idx: u32, @builtin(instance
 }
 `;
 
-const fragmentShader = /*glsl*/`
+const fragmentShader = /*wgsl*/`
 @fragment
 fn fragment_main(fragData: VertexOut) -> @location(0) vec4f {
     // Global directional light from uniform
