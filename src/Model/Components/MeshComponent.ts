@@ -1,5 +1,8 @@
 import type { Component } from './Component';
 import type { Mesh } from '../../Types/MeshType';
+import type Entity from '../Entity';
+import defaultRenderShader from '../../View/shaders/DefaultRenderer';
+import CustomRenderShader from './CustomRenderShader';
 
 export class MeshComponent implements Component {
     mesh: Mesh;
@@ -9,7 +12,11 @@ export class MeshComponent implements Component {
         this.texture = texture;
     }
 
-    start() : Mesh {
+    start(entity: Entity): Mesh {
+        // Ensure entity has a render shader (use default if none)
+        if (!entity.getComponent(CustomRenderShader)) {
+            entity.addComponent(defaultRenderShader);
+        }
         return this.mesh;
     }
 }

@@ -23,8 +23,6 @@ export abstract class BaseView {
     protected far = 10000;
     protected meshes: { [id: string]: Mesh } = {};
     protected sceneObjects: Entity[] = [];
-    protected staticSceneObjects: Entity[] = [];
-    protected nonStaticSceneObjects: Entity[] = [];
     protected lastSceneObjectsRef?: Entity[];
     protected lastCameraKey?: string;
     protected camera: Entity = new Entity('default-camera', V.vec4(), M.mat4(), V.vec4(1, 1, 1, 1));

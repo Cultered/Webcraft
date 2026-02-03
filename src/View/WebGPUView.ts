@@ -1,5 +1,4 @@
 import { BaseView } from './BaseView';
-import defaultRenderShader from './shaders/DefaultRenderer';
 import { ShowWebGPUInstructions } from '../misc/misc';
 import * as M from '../misc/mat4';
 import debug from '../Debug/Debug';
@@ -23,9 +22,6 @@ export class WebGPUView extends BaseView {
     private depthTexture?: GPUTexture;
     private renderPipelines = new Map<string, GPURenderPipeline>();
     private objectBuffers = new Map<string, { vertexBuffer: GPUBuffer; indexBuffer: GPUBuffer; indices: Uint32Array | Uint16Array }>();
-    private staticMeshBatches = new Map<string, { base: number; count: number; meshId: string; textureId: string }>();
-    private nonStaticMeshBatches = new Map<string, { base: number; count: number; meshId: string; textureId: string }>();
-    private nonStaticBaseOffset = 0;
     private objectStorageBuffer?: GPUBuffer;
     private cameraBuffer?: GPUBuffer;
     private projectionBuffer?: GPUBuffer;
@@ -85,8 +81,6 @@ export class WebGPUView extends BaseView {
                 };
 
                 makeAttachments();
-
-                this.createPipeline(defaultRenderShader);
 
                 this.objectStorageBuffer = this.device.createBuffer({
                     size: 64 * this.maxObjects,
@@ -156,61 +150,35 @@ export class WebGPUView extends BaseView {
         }
     }
 
-    public registerSceneObjectsSeparated(staticObjects: Entity[], nonStaticObjects: Entity[], updateStatic: boolean): void {
+    public registerSceneObjectsSeparated(staticObjects: Entity[], nonStaticObjects: Entity[], _updateStatic: boolean): void {
         if (!this.device) throw new Error('WebGPU device not initialized');
 
-        // Separate custom shader objects from regular objects
-        const regularStaticObjects: Entity[] = [];
-        const regularNonStaticObjects: Entity[] = [];
-        const customShaderObjects: Entity[] = [];
+        // Combine all objects
+        const allObjects = [...staticObjects, ...nonStaticObjects];
 
-        for (const e of staticObjects) {
-            if (e.getComponent(CustomRenderShader)) {
-                customShaderObjects.push(e);
-            } else {
-                regularStaticObjects.push(e);
+        // All objects are treated uniformly (MeshComponent.start() ensures they have a shader)
+        this.sceneObjects = allObjects;
+        this.customShaderObjects = allObjects.filter(e => e.getComponent(CustomRenderShader));
+
+        // Create pipelines for each unique shader
+        if (this.customShaderObjects.length > 0) {
+            this.createCustomPipelines(this.customShaderObjects);
+        }
+
+        // Ensure all meshes have GPU buffers created
+        const ensureMeshUploaded = (e: Entity) => {
+            const mc = e.getComponent(MeshComponent);
+            if (!mc) return;
+            const m = mc.mesh;
+            // Only create GPU buffers if we don't already have them
+            if (!this.objectBuffers.has(m.id)) {
+                this.uploadMeshToGPU(m.id, m.vertices, m.normals, m.uvs, m.indices);
             }
-        }
-
-        for (const e of nonStaticObjects) {
-            if (e.getComponent(CustomRenderShader)) {
-                customShaderObjects.push(e);
-            } else {
-                regularNonStaticObjects.push(e);
-            }
-        }
-
-        this.staticSceneObjects = regularStaticObjects;
-        this.nonStaticSceneObjects = regularNonStaticObjects;
-        this.customShaderObjects = customShaderObjects;
-
-        // Create custom pipelines for each unique shader
-        if (customShaderObjects.length > 0) {
-            this.createCustomPipelines(customShaderObjects);
-        }
-
-        if (updateStatic) {
-            // When static data is refreshed, make sure all meshes referenced by either
-            // static or non-static entities have GPU buffers created. This avoids
-            // rendering stalls later if a mesh appears first in a static rebuild.
-            const ensureMeshUploaded = (e: Entity) => {
-                const mc = e.getComponent(MeshComponent);
-                if (!mc) return;
-                const m = mc.mesh;
-                // Only create GPU buffers if we don't already have them
-                if (!this.objectBuffers.has(m.id)) {
-                    this.uploadMeshToGPU(m.id, m.vertices, m.normals, m.uvs, m.indices);
-                }
-            };
-            for (const e of regularStaticObjects) ensureMeshUploaded(e);
-            for (const e of regularNonStaticObjects) ensureMeshUploaded(e);
-            for (const e of customShaderObjects) ensureMeshUploaded(e);
-            // Update entire buffer including static objects
-            this.updateObjectStorageBufferWithSeparation(regularStaticObjects, regularNonStaticObjects);
-        } else {
-            // Only update non-static portion
-            this.updateNonStaticObjectsOnly(regularNonStaticObjects);
-        }
+        };
+        for (const e of this.customShaderObjects) ensureMeshUploaded(e);
+        
+        // Update object storage buffer
+        this.updateObjectStorageBuffer();
     }
 
     private createPipeline(shader: CustomRenderShader): void {
@@ -425,8 +393,8 @@ export class WebGPUView extends BaseView {
     }
 
     public render(): void {
-        if (!this.device || !this.context || !this.renderPipelines.get('default') || !this.depthTexture || !this.msaaColorTexture) {
-            console.warn('Render skipped: device/context/pipeline not ready');
+        if (!this.device || !this.context || !this.depthTexture || !this.msaaColorTexture) {
+            console.warn('Render skipped: device/context not ready');
             return;
         }
 
@@ -467,54 +435,11 @@ export class WebGPUView extends BaseView {
         try {
             const commandEncoder = this.device.createCommandEncoder();
             const passEncoder = commandEncoder.beginRenderPass(renderPassDescriptor);
-            passEncoder.setPipeline(this.renderPipelines.get('default')!);
 
-            // Set bind groups 1 and 2 for the default pipeline (Firefox requires all bind groups to be set)
-            const defaultBindGroups = this.customShaderBindGroups.get('default');
-            if (defaultBindGroups && defaultBindGroups[0]) {
-                passEncoder.setBindGroup(1, defaultBindGroups[0]);
-            }
-            // Get empty bind group 2 for default pipeline
-            const defaultPipeline = this.renderPipelines.get('default')!;
-            const defaultBindGroup2 = this.getBindingGroupForCustomShaderTextures(defaultPipeline, defaultRenderShader);
-            passEncoder.setBindGroup(2, defaultBindGroup2);
-
-            // Optimized rendering: draw static objects first, then non-static objects, grouped by mesh+texture
             let objIndex = 0;
-            // First, draw all static objects grouped by mesh+texture
-            for (const [_, batch] of this.staticMeshBatches) {
-                const buf = this.objectBuffers.get(batch.meshId);
-                if (!buf) continue;
 
-                // Get the appropriate bind group for this texture
-                const bindGroup = this.getBindGroupForDefaultTexture(batch.textureId);
-                passEncoder.setBindGroup(0, bindGroup);
-
-                passEncoder.setVertexBuffer(0, buf.vertexBuffer);
-                const indexFormat: GPUIndexFormat = buf.indices instanceof Uint16Array ? 'uint16' : 'uint32';
-                passEncoder.setIndexBuffer(buf.indexBuffer, indexFormat);
-                passEncoder.drawIndexed(buf.indices.length, batch.count, 0, 0, batch.base);
-                objIndex += batch.count;
-            }
-
-            // Then, draw all non-static objects grouped by mesh+texture
-            for (const [_, batch] of this.nonStaticMeshBatches) {
-                const buf = this.objectBuffers.get(batch.meshId);
-                if (!buf) continue;
-
-                // Get the appropriate bind group for this texture
-                const bindGroup = this.getBindGroupForDefaultTexture(batch.textureId);
-                passEncoder.setBindGroup(0, bindGroup);
-
-                passEncoder.setVertexBuffer(0, buf.vertexBuffer);
-                const indexFormat: GPUIndexFormat = buf.indices instanceof Uint16Array ? 'uint16' : 'uint32';
-                passEncoder.setIndexBuffer(buf.indexBuffer, indexFormat);
-                passEncoder.drawIndexed(buf.indices.length, batch.count, 0, 0, batch.base);
-                objIndex += batch.count;
-            }
-            debug.log(`Drawn ${objIndex} objects in total.`);
-
-            // Render custom shader objects individually after normal batches
+            // Render all objects (all have CustomRenderShader now)
+            let currentPipelineId: string | null = null;
             for (const entity of this.customShaderObjects) {
                 const customShader = entity.getComponent(CustomRenderShader);
                 const meshComponent = entity.getComponent(MeshComponent);
@@ -523,7 +448,7 @@ export class WebGPUView extends BaseView {
 
                 const pipeline = this.renderPipelines.get(`${customShader.id}`);
                 if (!pipeline) {
-                    console.warn(`Custom pipeline not found for shader: ${customShader.id}`);
+                    console.warn(`Pipeline not found for shader: ${customShader.id}`);
                     continue;
                 }
 
@@ -533,12 +458,15 @@ export class WebGPUView extends BaseView {
                 // Get the storage buffer index for this entity
                 const instanceIndex = this.customShaderObjectIndices.get(entity.id);
                 if (instanceIndex === undefined) {
-                    console.warn(`No storage buffer index found for custom shader entity: ${entity.id}`);
+                    console.warn(`No storage buffer index found for entity: ${entity.id}`);
                     continue;
                 }
 
-                // Switch to custom pipeline
-                passEncoder.setPipeline(pipeline);
+                // Only switch pipeline if different from current
+                if (currentPipelineId !== customShader.id) {
+                    passEncoder.setPipeline(pipeline);
+                    currentPipelineId = customShader.id;
+                }
 
                 // Bind group 0 (default bindings: camera, projection, texture, etc.)
                 const bindGroup0 = this.getBindGroupForDefaultTexture(meshComponent.texture);
@@ -549,7 +477,7 @@ export class WebGPUView extends BaseView {
                 if (customBindGroups && customBindGroups[0]) {
                     passEncoder.setBindGroup(1, customBindGroups[0]);
                 } else {
-                    console.warn(`Missing bind group 1 for custom shader: ${customShader.id}, skipping draw`);
+                    console.warn(`Missing bind group 1 for shader: ${customShader.id}, skipping draw`);
                     continue;
                 }
 
@@ -577,7 +505,7 @@ export class WebGPUView extends BaseView {
         } catch (e) {
             console.error('Render error:', e);
         }
-        debug.log(`WebGPUView rendered ${this.staticSceneObjects.length} static objects; ${this.nonStaticSceneObjects.length} non-static objects; ${this.customShaderObjects.length} custom shader objects.`);
+        debug.log(`WebGPUView rendered ${this.customShaderObjects.length} objects.`);
     }
 
     private createBuffersForMesh(meshId: string): void {
@@ -630,189 +558,20 @@ export class WebGPUView extends BaseView {
         this.objectBuffers.set(meshId, { vertexBuffer, indexBuffer, indices });
     }
 
-    private updateObjectStorageBufferWithSeparation(staticObjects: Entity[], nonStaticObjects: Entity[]): void {
+    private updateObjectStorageBuffer(): void {
         if (!this.device) throw new Error('Device not initialized');
-        const totalObjectCount = staticObjects.length + nonStaticObjects.length + this.customShaderObjects.length;
-        // Ensure storage buffer is large enough; if we recreated it we must also rebuild the bind group
-        let recreated = false;
+        // All objects are now in customShaderObjects
+        const totalObjectCount = this.customShaderObjects.length;
+        // Ensure storage buffer is large enough
         if (totalObjectCount > this.maxObjects || !this.objectStorageBuffer) {
             this.maxObjects = Math.max(totalObjectCount, this.maxObjects);
             this.objectStorageBuffer?.destroy();
             this.objectStorageBuffer = this.device.createBuffer({ size: 64 * this.maxObjects, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST });
-            recreated = true;
         }
 
-        const all = this.buildBatchesAndMatrixBuffer(staticObjects, nonStaticObjects);
-        this.device.queue.writeBuffer(this.objectStorageBuffer!, 0, all.buffer, 0, all.byteLength);
-
-        // Add custom shader object transforms after the regular objects
-        const customShaderBaseIndex = this.getCustomShaderBaseIndex(staticObjects, nonStaticObjects);
-        this.updateCustomShaderObjectTransforms(customShaderBaseIndex);
+        // Update all object transforms
+        this.updateCustomShaderObjectTransforms(0);
         this.updateCustomShaderBuffers();
-
-        if (recreated) {
-            // Note: Bind groups are now created dynamically in render() based on texture
-        }
-    }
-
-    private updateNonStaticObjectsOnly(nonStaticObjects: Entity[]): void {
-        if (!this.device) throw new Error('Device not initialized');
-
-        if (!this.objectStorageBuffer) {
-            // If no buffer exists, create it and write all data
-            const all = this.buildBatchesAndMatrixBuffer(this.staticSceneObjects, nonStaticObjects);
-            this.maxObjects = Math.max(this.maxObjects, (this.staticSceneObjects.length + nonStaticObjects.length));
-            this.objectStorageBuffer = this.device.createBuffer({ size: 64 * this.maxObjects, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST });
-            // Note: Bind groups are now created dynamically in render() based on texture
-            this.device.queue.writeBuffer(this.objectStorageBuffer!, 0, all.buffer, 0, all.byteLength);
-            return;
-        }
-
-        // Only update the non-static portion of the buffer
-        const nonStaticMatrixBuffer = this.buildNonStaticMatrixBuffer(nonStaticObjects);
-        if (nonStaticMatrixBuffer.length > 0) {
-            const offsetBytes = this.nonStaticBaseOffset * 16 * 4; // offset in bytes (16 floats * 4 bytes per float)
-            this.device.queue.writeBuffer(this.objectStorageBuffer!, offsetBytes, nonStaticMatrixBuffer.buffer, 0, nonStaticMatrixBuffer.byteLength);
-        }
-
-        // Update batch information for non-static objects
-        this.updateNonStaticBatches(nonStaticObjects);
-
-        // Update custom shader object transforms
-        const customShaderBaseIndex = this.getCustomShaderBaseIndex(this.staticSceneObjects, nonStaticObjects);
-        this.updateCustomShaderObjectTransforms(customShaderBaseIndex);
-
-        // Update custom shader buffers
-        this.updateCustomShaderBuffers();
-    }
-
-    private getCustomShaderBaseIndex(staticObjects: Entity[], nonStaticObjects: Entity[]): number {
-        return staticObjects.length + nonStaticObjects.length;
-    }
-
-    private buildBatchesAndMatrixBuffer(staticObjs: Entity[], nonStaticObjs: Entity[]) {
-        // Group objects by mesh+texture, keeping static and non-static separate
-        const staticGroups = new Map<string, Entity[]>();
-        const nonStaticGroups = new Map<string, Entity[]>();
-
-        const pushStatic = (o: Entity) => {
-            const meshComponent = o.getComponent(MeshComponent);
-            if (!meshComponent) return;
-            const id = `${meshComponent.mesh.id}-${meshComponent.texture}`;
-            if (!staticGroups.has(id)) staticGroups.set(id, []);
-            staticGroups.get(id)!.push(o);
-        };
-
-        const pushNonStatic = (o: Entity) => {
-            const meshComponent = o.getComponent(MeshComponent);
-            if (!meshComponent) return;
-            const id = `${meshComponent.mesh.id}-${meshComponent.texture}`;
-            if (!nonStaticGroups.has(id)) nonStaticGroups.set(id, []);
-            nonStaticGroups.get(id)!.push(o);
-        };
-
-        staticObjs.forEach(pushStatic);
-        nonStaticObjs.forEach(pushNonStatic);
-
-        const total = staticObjs.length + nonStaticObjs.length;
-        const out = new Float32Array(total * 16);
-        this.staticMeshBatches.clear();
-        this.nonStaticMeshBatches.clear();
-
-        let cursor = 0;
-
-        // First, add all static objects grouped by mesh+texture
-        for (const [meshTextureId, arr] of staticGroups) {
-            const firstMC = arr[0].getComponent(MeshComponent)!;
-            const batch = { base: cursor, count: arr.length, meshId: firstMC.mesh.id, textureId: firstMC.texture };
-            this.staticMeshBatches.set(meshTextureId, batch);
-
-            for (let i = 0; i < arr.length; i++) {
-                const o = arr[i];
-                const t = [o.position[0], o.position[1], o.position[2]];
-                const s = [o.scale[0], o.scale[1], o.scale[2]];
-                const m = M.mat4Transpose(M.mat4TRS(t, o.rotation, s));
-                out.set(m, (cursor + i) * 16);
-            }
-            cursor += arr.length;
-        }
-
-        // Then, add all non-static objects grouped by mesh+texture
-        this.nonStaticBaseOffset = cursor;
-        for (const [meshTextureId, arr] of nonStaticGroups) {
-            const firstMC = arr[0].getComponent(MeshComponent)!;
-            const batch = { base: cursor, count: arr.length, meshId: firstMC.mesh.id, textureId: firstMC.texture };
-            this.nonStaticMeshBatches.set(meshTextureId, batch);
-
-            for (let i = 0; i < arr.length; i++) {
-                const o = arr[i];
-                const t = [o.position[0], o.position[1], o.position[2]];
-                const s = [o.scale[0], o.scale[1], o.scale[2]];
-                const m = M.mat4Transpose(M.mat4TRS(t, o.rotation, s));
-                out.set(m, (cursor + i) * 16);
-            }
-            cursor += arr.length;
-        }
-
-
-        return out;
-    }
-
-    private buildNonStaticMatrixBuffer(nonStaticObjs: Entity[]): Float32Array {
-        // Group non-static objects by mesh+texture
-        const nonStaticGroups = new Map<string, Entity[]>();
-
-        const pushNonStatic = (o: Entity) => {
-            const meshComponent = o.getComponent(MeshComponent);
-            if (!meshComponent) return;
-            const id = `${meshComponent.mesh.id}-${meshComponent.texture}`;
-            if (!nonStaticGroups.has(id)) nonStaticGroups.set(id, []);
-            nonStaticGroups.get(id)!.push(o);
-        };
-
-        nonStaticObjs.forEach(pushNonStatic);
-
-        const out = new Float32Array(nonStaticObjs.length * 16);
-        let cursor = 0;
-
-        // Process in same order as buildBatchesAndMatrixBuffer
-        for (const [, arr] of nonStaticGroups) {
-            for (let i = 0; i < arr.length; i++) {
-                const o = arr[i];
-                const t = [o.position[0], o.position[1], o.position[2]];
-                const s = [o.scale[0], o.scale[1], o.scale[2]];
-                const m = M.mat4Transpose(M.mat4TRS(t, o.rotation, s));
-                out.set(m, (cursor + i) * 16);
-            }
-            cursor += arr.length;
-        }
-
-        return out;
-    }
-
-    private updateNonStaticBatches(nonStaticObjs: Entity[]): void {
-        // Group non-static objects by mesh+texture and update batch information
-        const nonStaticGroups = new Map<string, Entity[]>();
-
-        const pushNonStatic = (o: Entity) => {
-            const meshComponent = o.getComponent(MeshComponent);
-            if (!meshComponent) return;
-            const id = `${meshComponent.mesh.id}-${meshComponent.texture}`;
-            if (!nonStaticGroups.has(id)) nonStaticGroups.set(id, []);
-            nonStaticGroups.get(id)!.push(o);
-        };
-
-        nonStaticObjs.forEach(pushNonStatic);
-
-        this.nonStaticMeshBatches.clear();
-        let cursor = this.nonStaticBaseOffset;
-
-        for (const [meshTextureId, arr] of nonStaticGroups) {
-            const firstMC = arr[0].getComponent(MeshComponent)!;
-            this.nonStaticMeshBatches.set(meshTextureId, { base: cursor, count: arr.length, meshId: firstMC.mesh.id, textureId: firstMC.texture });
-            cursor += arr.length;
-        }
-
     }
 
     private updateCustomShaderObjectTransforms(baseIndex: number): void {
