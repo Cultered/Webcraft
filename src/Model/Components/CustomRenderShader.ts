@@ -42,6 +42,8 @@ export interface PipelineSettings {
     depthWriteEnabled?: boolean;
     /** Depth comparison function (default: 'less') */
     depthCompare?: GPUCompareFunction;
+    /** Render priority - higher values render first (default: 0) */
+    priority?: number;
 }
 
 /**

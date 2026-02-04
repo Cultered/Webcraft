@@ -5,8 +5,10 @@ import debug from '../Debug/Debug';
 import type Entity from '../Model/Entity';
 import MeshComponent from '../Model/Components/MeshComponent';
 import CustomRenderShader from '../Model/Components/CustomRenderShader';
+import PostProcessingShader from '../Model/Components/PostProcessingShader';
 import { TextureHelper } from './textureHelper';
 import { PipelineHelper } from './PipelineHelper';
+import defaultRenderShader from './shaders/DefaultRenderer';
 
 
 export class WebGPUView extends BaseView {
@@ -35,6 +37,14 @@ export class WebGPUView extends BaseView {
     private msaaColorTexture?: GPUTexture;
     public sampleCount = 4;
 
+    // Post-processing support
+    private postProcessTextures: GPUTexture[] = [];
+    private sceneTexture?: GPUTexture; // Stores original scene for composite passes
+    private postProcessSampler?: GPUSampler;
+    private postProcessResolutionBuffer?: GPUBuffer;
+    private postProcessTimeBuffer?: GPUBuffer;
+    private postProcessStartTime: number = 0;
+    private postProcessShaders: PostProcessingShader[] = [];
 
     private customShaderObjects: Entity[] = [];
     private customShaderObjectIndices = new Map<string, number>();
@@ -54,6 +64,8 @@ export class WebGPUView extends BaseView {
             this.th = new TextureHelper(this);
             this.ph = new PipelineHelper(this);
 
+            this.ph.createRenderPipeline(defaultRenderShader); // I DONT KNOW WHY IT DOESNT WORK IN CONSTRUCTOR BUT IT DOESNT ALR
+
             try {
                 // Create helper to (re)create MSAA color + depth attachments sized to the canvas
                 const makeAttachments = () => {
@@ -66,7 +78,7 @@ export class WebGPUView extends BaseView {
                     this.depthTexture = this.device!.createTexture({
                         size: { width: w, height: h, depthOrArrayLayers: 1 },
                         sampleCount: this.sampleCount,
-                        format: 'depth32float',
+                        format: 'depth24plus',
                         usage: GPUTextureUsage.RENDER_ATTACHMENT,
                     });
 
@@ -76,6 +88,29 @@ export class WebGPUView extends BaseView {
                         sampleCount: this.sampleCount,
                         format: navigator.gpu.getPreferredCanvasFormat(),
                         usage: GPUTextureUsage.RENDER_ATTACHMENT,
+                    });
+
+                    // Create post-processing textures (ping-pong buffers)
+                    for (const tex of this.postProcessTextures) {
+                        tex.destroy();
+                    }
+                    this.sceneTexture?.destroy();
+                    this.postProcessTextures = [];
+                    // We need 2 textures for ping-pong rendering
+                    for (let i = 0; i < 2; i++) {
+                        this.postProcessTextures.push(this.device!.createTexture({
+                            size: { width: w, height: h, depthOrArrayLayers: 1 },
+                            sampleCount: 1, // Post-processing uses non-MSAA textures
+                            format: navigator.gpu.getPreferredCanvasFormat(),
+                            usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_SRC,
+                        }));
+                    }
+                    // Scene texture to preserve original for composite passes
+                    this.sceneTexture = this.device!.createTexture({
+                        size: { width: w, height: h, depthOrArrayLayers: 1 },
+                        sampleCount: 1,
+                        format: navigator.gpu.getPreferredCanvasFormat(),
+                        usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST,
                     });
                 };
 
@@ -121,6 +156,23 @@ export class WebGPUView extends BaseView {
                     magFilter: 'linear',
                     minFilter: 'linear',
                 });
+
+                // Post-processing sampler and buffers
+                this.postProcessSampler = device.createSampler({
+                    addressModeU: 'clamp-to-edge',
+                    addressModeV: 'clamp-to-edge',
+                    magFilter: 'linear',
+                    minFilter: 'linear',
+                });
+                this.postProcessResolutionBuffer = device.createBuffer({
+                    size: 8, // vec2f = 2 floats * 4 bytes
+                    usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
+                });
+                this.postProcessTimeBuffer = device.createBuffer({
+                    size: 4, // f32 = 4 bytes
+                    usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
+                });
+                this.postProcessStartTime = performance.now() / 1000;
 
 
                 const resizeCanvasAndDepthTexture = () => {
@@ -195,6 +247,25 @@ export class WebGPUView extends BaseView {
         }
     }
 
+    /**
+     * Register post-processing shaders to be applied after rendering
+     */
+    public registerPostProcessShaders(shaders: PostProcessingShader[]): void {
+        // Only update if shaders changed
+        const shaderIds = shaders.map(s => s.id).join(',');
+        const currentIds = this.postProcessShaders.map(s => s.id).join(',');
+        
+        if (shaderIds !== currentIds) {
+            this.postProcessShaders = shaders;
+            // Create pipelines for new post-processing shaders
+            if (this.postProcessShaders.length > 0 && this.ph) {
+                this.ph.createPostProcessPipelines(this.postProcessShaders);
+            }
+        } else {
+            this.postProcessShaders = shaders;
+        }
+    }
+
     public uploadMeshToGPU(meshId: string, vertices: Float32Array, normals: Float32Array, uvs: Float32Array, indices: Uint32Array | Uint16Array): void {
         this.meshes[meshId] = { id: meshId, vertices, normals, uvs, indices };
         if (this.device) this.createBuffersForMesh(meshId);
@@ -217,18 +288,38 @@ export class WebGPUView extends BaseView {
             this.device.queue.writeBuffer(this.globalAmbientColorBuffer, 0, new Float32Array(this.globalAmbientColor));
         }
 
-        // use MSAA color texture as the attachment and resolve into swapchain view
+        // Update post-processing uniforms
+        if (this.postProcessResolutionBuffer && this.canvas) {
+            this.device.queue.writeBuffer(
+                this.postProcessResolutionBuffer,
+                0,
+                new Float32Array([this.canvas.width, this.canvas.height])
+            );
+        }
+        if (this.postProcessTimeBuffer) {
+            const currentTime = performance.now() / 1000 - this.postProcessStartTime;
+            this.device.queue.writeBuffer(this.postProcessTimeBuffer, 0, new Float32Array([currentTime]));
+        }
+
+        // Get enabled post-processing shaders
+        const enabledPostProcessShaders = this.postProcessShaders.filter(pp => pp.isEnabled());
+        const hasPostProcess = enabledPostProcessShaders.length > 0 && this.postProcessTextures.length >= 2;
+
+        // Determine resolve target for main render pass
         const swapView = this.context.getCurrentTexture().createView();
         const msaaView = this.msaaColorTexture!.createView();
 
+        // If we have post-processing, resolve to first ping-pong texture instead of swap chain
+        const mainResolveTarget = hasPostProcess 
+            ? this.postProcessTextures[0].createView() 
+            : swapView;
 
         this.depthView = this.depthTexture!.createView();
-
 
         const renderPassDescriptor: GPURenderPassDescriptor = {
             colorAttachments: [{
                 view: msaaView,
-                resolveTarget: swapView,
+                resolveTarget: mainResolveTarget,
                 loadOp: 'clear',
                 storeOp: 'store',
             }],
@@ -246,9 +337,18 @@ export class WebGPUView extends BaseView {
 
             let objIndex = 0;
 
+            // Sort objects by priority (higher first), then render
+            const sortedObjects = [...this.customShaderObjects].sort((a, b) => {
+                const shaderA = a.getComponent(CustomRenderShader);
+                const shaderB = b.getComponent(CustomRenderShader);
+                const priorityA = shaderA?.pipelineSettings?.priority ?? 0;
+                const priorityB = shaderB?.pipelineSettings?.priority ?? 0;
+                return priorityB - priorityA; // Higher priority first
+            });
+
             // Render all objects (all have CustomRenderShader now)
             let currentPipelineId: string | null = null;
-            for (const entity of this.customShaderObjects) {
+            for (const entity of sortedObjects) {
                 const customShader = entity.getComponent(CustomRenderShader);
                 const meshComponent = entity.getComponent(MeshComponent);
 
@@ -299,11 +399,103 @@ export class WebGPUView extends BaseView {
             }
 
             passEncoder.end();
+
+            // Apply post-processing passes
+            if (hasPostProcess) {
+                // Copy the original scene to sceneTexture for composite passes
+                if (this.sceneTexture) {
+                    commandEncoder.copyTextureToTexture(
+                        { texture: this.postProcessTextures[0] },
+                        { texture: this.sceneTexture },
+                        { width: this.canvas!.width, height: this.canvas!.height, depthOrArrayLayers: 1 }
+                    );
+                }
+                this.renderPostProcessPasses(commandEncoder, enabledPostProcessShaders, swapView);
+            }
+
             this.device.queue.submit([commandEncoder.finish()]);
         } catch (e) {
             console.error('Render error:', e);
         }
         debug.log(`WebGPUView rendered ${this.customShaderObjects.length} objects.`);
+    }
+
+    /** Get the scene texture for composite passes */
+    public getSceneTexture(): GPUTexture | undefined {
+        return this.sceneTexture;
+    }
+
+    /**
+     * Render post-processing passes using ping-pong buffers
+     */
+    private renderPostProcessPasses(
+        commandEncoder: GPUCommandEncoder,
+        shaders: PostProcessingShader[],
+        finalTarget: GPUTextureView
+    ): void {
+        if (!this.device || !this.ph || !this.postProcessSampler) return;
+
+        let inputTextureIndex = 0; // Start with the scene rendered to postProcessTextures[0]
+
+        for (let i = 0; i < shaders.length; i++) {
+            const shader = shaders[i];
+            const isLast = i === shaders.length - 1;
+
+            // Input is current ping-pong texture
+            const inputTexture = this.postProcessTextures[inputTextureIndex];
+
+            // Output is either the next ping-pong texture or the final swap chain
+            const outputTarget = isLast 
+                ? finalTarget 
+                : this.postProcessTextures[1 - inputTextureIndex].createView();
+
+            const pipeline = this.ph.getPostProcessPipeline(shader.id);
+            if (!pipeline) {
+                console.warn(`Post-process pipeline not found for shader: ${shader.id}`);
+                continue;
+            }
+
+            // Update custom buffers for this shader
+            this.ph.updatePostProcessBuffers(shader);
+
+            // Create bind group for this pass (include scene texture if needed)
+            const sceneTextureView = shader.needsSceneTexture() && this.sceneTexture 
+                ? this.sceneTexture.createView() 
+                : undefined;
+
+            const bindGroup0 = this.ph.getPostProcessBindGroup0(
+                pipeline,
+                this.postProcessSampler,
+                inputTexture.createView(),
+                this.postProcessResolutionBuffer!,
+                this.postProcessTimeBuffer!,
+                sceneTextureView
+            );
+
+            const bindGroup1 = this.ph.getPostProcessBindGroup1(pipeline, shader);
+
+            // Create render pass for post-processing
+            const postPassDescriptor: GPURenderPassDescriptor = {
+                colorAttachments: [{
+                    view: outputTarget,
+                    loadOp: 'clear',
+                    storeOp: 'store',
+                }],
+            };
+
+            const postPassEncoder = commandEncoder.beginRenderPass(postPassDescriptor);
+            postPassEncoder.setPipeline(pipeline);
+            postPassEncoder.setBindGroup(0, bindGroup0);
+            postPassEncoder.setBindGroup(1, bindGroup1);
+            // Draw full-screen triangle (3 vertices, no vertex buffers needed)
+            postPassEncoder.draw(3, 1, 0, 0);
+            postPassEncoder.end();
+
+            // Swap ping-pong index for next pass (only if not last)
+            if (!isLast) {
+                inputTextureIndex = 1 - inputTextureIndex;
+            }
+        }
     }
 
     private createBuffersForMesh(meshId: string): void {
@@ -417,7 +609,7 @@ export class WebGPUView extends BaseView {
 
     private getBindGroupForDefaultTexture(textureId: string): GPUBindGroup {
         if (!this.device || !this.ph?.getPipeline('default')) {
-            throw new Error('WebGPU device or pipeline not initialized');
+            throw new Error('WebGPU device or pipeline not initialized,'+this.device+','+this.ph?.getPipeline('default') + textureId);
         }
         // Check if we already have a bind group for this texture
         if (this.bindGroups.has(textureId)) {

@@ -219,7 +219,7 @@ fn fragment_main(fragData: VertexOut) -> @location(0) vec4f {
     cloudColor = mix(cloudColor, vec3f(0.02, 0.02, 0.025), nightFactor);
     
     // Only show clouds above horizon
-    let cloudMask = smoothstep(0.0, 0.2, viewHeight) * (1.0 - smoothstep(0.5, 0.9, viewHeight));
+    let cloudMask = 1.;//smoothstep(0.0, 0.2, viewHeight) * (1.0 - smoothstep(0.5, 0.9, viewHeight));
     skyColor = mix(skyColor, cloudColor, cloudDensity * cloudMask * 0.68 );
     
     // Stars at night (only visible when sun is below horizon)
@@ -233,11 +233,11 @@ fn fragment_main(fragData: VertexOut) -> @location(0) vec4f {
     }
     
     // Ground color (below horizon)
-    let groundBlend = smoothstep(0.0, -0.05, viewHeight);
-    let dayGroundColor = vec3f(0.25, 0.22, 0.18);
-    let nightGroundColor = vec3f(0.02, 0.02, 0.03);
-    let groundColor = mix(nightGroundColor, dayGroundColor, dayFactor);
-    skyColor = mix(skyColor, groundColor, groundBlend);
+    // let groundBlend = smoothstep(0.0, -0.05, viewHeight);
+    // let dayGroundColor = vec3f(0.25, 0.22, 0.18);
+    // let nightGroundColor = vec3f(0.02, 0.02, 0.03);
+    // let groundColor = mix(nightGroundColor, dayGroundColor, dayFactor);
+    // skyColor = mix(skyColor, groundColor, groundBlend);
     
     // Tone mapping (simple Reinhard)
     skyColor = skyColor / (skyColor + vec3f(1.0));
@@ -272,8 +272,9 @@ const skyboxShader = new CustomRenderShader(
     ],
     [],
     {
-        cullMode: 'front', // Inside the skybox sphere
-        depthWriteEnabled: false // Skybox should not write to depth buffer
+        cullMode: 'front',
+        depthWriteEnabled: false, 
+        priority: 100,
     }
 );
 
@@ -288,11 +289,10 @@ skyboxShader.update = () => {
         skyboxShader.bufferSpecs[1].data = new Float32Array(camera.position.slice(0, 4));
     }
 
-    // Update global light direction to cycle day/night
-    const sunAngle = Date.now()/10000; // Full cycle every ~3 minutes
-    const sunX = Math.cos(sunAngle) * 0.8;
-    const sunY = Math.sin(sunAngle) * 0.7 + 0.2; // Keep sun relatively high at peak
-    const sunZ = Math.sin(sunAngle) * 0.5;
+
+    const sunX = 4
+    const sunY = 3
+    const sunZ = 0
     const len = Math.sqrt(sunX * sunX + sunY * sunY + sunZ * sunZ);
     
     if (VIEW) {

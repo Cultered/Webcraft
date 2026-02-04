@@ -20,7 +20,7 @@ export abstract class BaseView {
     public globalAmbientColor: Vector4 = V.vec4(0.26, 0.23, 0.2, 1.0);
     protected fov = radians(80);
     protected near = 0.1;
-    protected far = 10000;
+    protected far = 100000;
     protected meshes: { [id: string]: Mesh } = {};
     protected sceneObjects: Entity[] = [];
     protected lastSceneObjectsRef?: Entity[];

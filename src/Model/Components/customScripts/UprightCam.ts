@@ -17,11 +17,17 @@ export default class UprightCam implements Component {
   
   private maxPitch = Math.PI / 2 - 0.01; // Prevent looking straight up/down
 
-  constructor(lockElement?: HTMLCanvasElement) {
+  constructor(lockElement?: HTMLCanvasElement, startingPitch?: number, startingYaw?: number) {
     if (lockElement) {
       this.lockElement = lockElement;
     } else {
       this.lockElement = document.querySelector('#main-canvas') as HTMLCanvasElement;
+    }
+    if (startingPitch !== undefined) {
+      this.pitch = Math.max(-this.maxPitch, Math.min(this.maxPitch, startingPitch));
+    }
+    if (startingYaw !== undefined) {
+      this.yaw = startingYaw;
     }
   }
 

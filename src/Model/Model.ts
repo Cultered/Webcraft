@@ -4,6 +4,7 @@ import * as V from '../misc/vec4';
 import * as M from '../misc/mat4';
 import { Entity } from './Entity';
 import { o11s } from '../config/config';
+import type PostProcessingShader from './Components/PostProcessingShader';
 
 
 
@@ -16,6 +17,9 @@ export default class Model {
     private chunks: Map<string, string[]> = new Map();
     private cachedVisibleSceneObjects: { static: Entity[], nonStatic: Entity[] } = { static: [], nonStatic: [] };
     private lastSceneObjectsCameraChunkKey?: string;
+
+    // Post-processing shaders (applied in order)
+    private postProcessShaders: PostProcessingShader[] = [];
 
     constructor() {
     }
@@ -41,6 +45,26 @@ export default class Model {
 
     getCamera(id: string): Entity | undefined {
         return this.cameras.find(camera => camera.id === id);
+    }
+
+    // Post-processing shader management
+    addPostProcessShader(shader: PostProcessingShader): void {
+        if (!this.postProcessShaders.find(s => s.id === shader.id)) {
+            this.postProcessShaders.push(shader);
+            // Sort by order (lower = earlier)
+            this.postProcessShaders.sort((a, b) => a.getOrder() - b.getOrder());
+        }
+    }
+
+    removePostProcessShader(shaderId: string): void {
+        const index = this.postProcessShaders.findIndex(s => s.id === shaderId);
+        if (index >= 0) {
+            this.postProcessShaders.splice(index, 1);
+        }
+    }
+
+    getPostProcessShaders(): PostProcessingShader[] {
+        return this.postProcessShaders;
     }
 
     requestInverseRotation(ent: Entity): Matrix4x4 {

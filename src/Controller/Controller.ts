@@ -72,6 +72,7 @@ export default class Controller {
     const mainCam = this.model.getCamera(this.camId);
     if (!mainCam) { console.error("No main camera"); return }
     this.view.registerCamera(mainCam);
+    this.view.registerPostProcessShaders(this.model.getPostProcessShaders());
     debug.perf('view-render', () => this.view.render());
   };
 

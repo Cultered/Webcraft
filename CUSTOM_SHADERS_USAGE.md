@@ -401,3 +401,164 @@ const opaqueShader = new CustomRenderShader(
 
 - Static objects can have custom shaders, but as they do not receive updates, any kind of additional buffers will not either, unless another non-static object also has the shader as one of the components.
 - All pipeline settings are optional. If not specified, sensible defaults are used (cullMode='back', alpha blending enabled, depthWriteEnabled=true, depthCompare='less').
+
+---
+
+# Post-Processing Shaders
+
+Post-processing shaders are applied after the main scene rendering is complete. They are attached to the camera entity and can be chained to create complex visual effects.
+
+## Overview
+
+Post-processing effects work by:
+1. Rendering the scene to an intermediate texture
+2. Applying each post-process shader in order (using ping-pong buffers)
+3. Outputting the final result to the screen
+
+## Basic Usage
+
+### 1. Create a Post-Processing Shader
+
+```typescript
+import PostProcessingShader from './src/Model/Components/PostProcessingShader';
+import { ShaderStage } from './src/config/webgpu-constants';
+
+// Define your fragment shader (WGSL)
+// The vertex shader is provided automatically (full-screen triangle)
+const fragmentShader = /*wgsl*/`
+struct VertexOut {
+    @builtin(position) position: vec4f,
+    @location(0) uv: vec2f,
+};
+
+// Standard post-process bindings (group 0) - provided automatically
+@group(0) @binding(0) var textureSampler: sampler;
+@group(0) @binding(1) var inputTexture: texture_2d<f32>;
+@group(0) @binding(2) var<uniform> u_resolution: vec2f;
+@group(0) @binding(3) var<uniform> u_time: f32;
+
+@fragment
+fn fragment_main(fragData: VertexOut) -> @location(0) vec4f {
+    let color = textureSample(inputTexture, textureSampler, fragData.uv);
+    // Apply your effect here
+    return color;
+}
+`;
+
+// Create the shader
+const postProcess = new PostProcessingShader(
+    'my-effect',        // Unique ID
+    fragmentShader,
+    [],                 // Optional: custom buffers for group 1
+    {
+        enabled: true,  // Can be toggled at runtime
+        order: 0        // Lower values render first
+    }
+);
+```
+
+### 2. Attach to Camera Entity
+
+```typescript
+// Get or create your camera entity
+const camera = new Entity('camera', vec4(0, 5, 10, 1));
+
+// Add post-processing shader as a component
+camera.addComponent(postProcess);
+
+// Register the camera with the view
+view.registerCamera(camera);
+```
+
+### 3. Multiple Effects
+
+You can chain multiple post-processing effects:
+
+```typescript
+import { createGrayscaleShader } from './src/Model/Components/postProcessShaders/GrayscaleShader';
+import { createVignetteShader } from './src/Model/Components/postProcessShaders/VignetteShader';
+import { createChromaticAberrationShader } from './src/Model/Components/postProcessShaders/ChromaticAberrationShader';
+
+// Add multiple effects (order determines render sequence)
+camera.addComponent(createGrayscaleShader());           // order: 0
+camera.addComponent(createChromaticAberrationShader()); // order: 5
+camera.addComponent(createVignetteShader());            // order: 10
+```
+
+## Custom Uniforms (Group 1)
+
+Add custom uniforms to your post-processing shaders:
+
+```typescript
+const u_blurRadius = new Float32Array([5.0]);
+
+const blurShader = new PostProcessingShader(
+    'blur-effect',
+    blurFragmentShader,
+    [
+        {
+            binding: 0,
+            size: 4,  // f32 = 4 bytes
+            type: 'uniform',
+            visibility: ShaderStage.FRAGMENT,
+            data: u_blurRadius
+        }
+    ]
+);
+
+// Update the uniform at runtime
+function setBlurRadius(radius: number) {
+    u_blurRadius[0] = radius;
+    // Buffer will be automatically updated on next frame
+}
+```
+
+## Built-in Bindings (Group 0)
+
+The following bindings are automatically provided to all post-processing shaders:
+
+| Binding | Type | Description |
+|---------|------|-------------|
+| 0 | sampler | Texture sampler for the input |
+| 1 | texture_2d<f32> | Input texture (previous pass or scene) |
+| 2 | vec2f | Screen resolution (width, height) |
+| 3 | f32 | Elapsed time in seconds |
+
+## Enable/Disable at Runtime
+
+```typescript
+// Toggle effect
+postProcess.pipelineSettings!.enabled = false;
+
+// Or use helper
+if (postProcess.isEnabled()) {
+    postProcess.pipelineSettings!.enabled = false;
+}
+```
+
+## Example Shaders
+
+Several example post-processing shaders are provided:
+
+- **GrayscaleShader**: Converts scene to grayscale with adjustable intensity
+- **VignetteShader**: Adds edge darkening effect
+- **ChromaticAberrationShader**: Color fringing effect at screen edges
+
+```typescript
+import { createGrayscaleShader, setGrayscaleIntensity } from './src/Model/Components/postProcessShaders/GrayscaleShader';
+import { createVignetteShader, setVignetteParams } from './src/Model/Components/postProcessShaders/VignetteShader';
+
+const grayscale = createGrayscaleShader();
+setGrayscaleIntensity(grayscale, 0.5); // 50% grayscale
+
+const vignette = createVignetteShader();
+setVignetteParams(vignette, 0.7, 0.4, 0.5); // intensity, radius, softness
+```
+
+## Notes
+
+- Post-processing uses non-MSAA textures (resolve happens before post-process)
+- Effects are applied in order based on the `order` setting (lower = earlier)
+- Multiple effects use ping-pong buffers to chain efficiently
+- The vertex shader generates a full-screen triangle using vertex index (no vertex buffers needed)
+- Disabled effects are skipped entirely (no performance cost)
